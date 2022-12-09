@@ -114,7 +114,7 @@ class ConstraintSolver extends NormalForms { self: Typer =>
     }()
     
     /* Solve annoying constraints,
-        which are those that involve either unions and intersections at the wrong polarities, or negations.
+        which are those that involve either unions and intersections at the wrong polarities or negations.
         This works by constructing all pairs of "conjunct <: disjunct" implied by the conceptual
         "DNF <: CNF" form of the constraint. */
     def annoying(ls: Ls[SimpleType], done_ls: LhsNf, rs: Ls[SimpleType], done_rs: RhsNf)
@@ -299,13 +299,19 @@ class ConstraintSolver extends NormalForms { self: Typer =>
       // println(s"[[ ${cctx._1.map(_.prov).mkString(", ")}  <<  ${cctx._2.map(_.prov).mkString(", ")} ]]")
       // println(s"{{ ${cache.mkString(", ")} }}")
       
-      if (lhs === rhs) return ()
-      
-      // if (lhs <:< rhs) return () // * It's not clear that doing this here is worth it
+      // if (!lhs.mentionsTypeBounds && lhs === rhs) return ()
+      // * ^ The check above is mostly good enough but it leads to slightly worse simplified type outputs
+      // *    in corner cases.
+      // * v The check below is a bit more precise but it incurs a lot more subtyping checks,
+      // *    especially in complex comparisons like those done in the `ExprProb` test family.
+      // *    Therefore this subtyping check may not be worth it.
+      // *    In any case, we make it more lightweight by not traversing type variables
+      // *    and not using a subtyping cache (cf. `CompareRecTypes = false`).
+      implicit val ctr: CompareRecTypes = false
+      if (lhs <:< rhs) ()
       
       // println(s"  where ${FunctionType(lhs, rhs)(primProv).showBounds}")
       else {
-        if (lhs is rhs) return
         val lhs_rhs = lhs -> rhs
         lhs_rhs match {
           case (_: ProvType, _) | (_, _: ProvType) => ()
@@ -325,6 +331,7 @@ class ConstraintSolver extends NormalForms { self: Typer =>
           case (_, TypeBounds(lb, ub)) => rec(lhs, lb, true)
           case (p @ ProvType(und), _) => rec(und, rhs, true)
           case (_, p @ ProvType(und)) => rec(lhs, und, true)
+          case (_: ObjectTag, _: ObjectTag) if lhs === rhs => ()
           case (NegType(lhs), NegType(rhs)) => rec(rhs, lhs, true)
           case (FunctionType(l0, r0), FunctionType(l1, r1)) =>
             rec(l1, l0, false)
@@ -563,7 +570,7 @@ class ConstraintSolver extends NormalForms { self: Typer =>
         detailedContext,
       ).flatten
       
-      raise(TypeError(msgs))
+      raise(ErrorReport(msgs))
     }
     
     rec(lhs, rhs, true)(raise, Nil -> Nil)
@@ -589,6 +596,8 @@ class ConstraintSolver extends NormalForms { self: Typer =>
         TupleType(fs.mapValues(_.update(extrude(_, lvl, !pol), extrude(_, lvl, pol))))(t.prov)
       case t @ ArrayType(ar) =>
         ArrayType(ar.update(extrude(_, lvl, !pol), extrude(_, lvl, pol)))(t.prov)
+      case t @ SpliceType(fs) => 
+        t.updateElems(extrude(_, lvl, pol), extrude(_, lvl, !pol), extrude(_, lvl, pol), t.prov)
       case w @ Without(b, ns) => Without(extrude(b, lvl, pol), ns)(w.prov)
       case tv: TypeVariable => cache.getOrElse(tv -> pol, {
         val nv = freshVar(tv.prov, tv.nameHint)(lvl)
@@ -610,7 +619,16 @@ class ConstraintSolver extends NormalForms { self: Typer =>
       case tr @ TypeRef(d, ts) =>
         TypeRef(d, tr.mapTargs(S(pol)) {
           case (N, targ) =>
-            TypeBounds(extrude(targ, lvl, false), extrude(targ, lvl, true))(noProv)
+            TypeBounds.mk(extrude(targ, lvl, false), extrude(targ, lvl, true)) // Q: ? subtypes?
+            // * A sanity-checking version, making sure the type range is correct ((LB subtype of UB):
+            /* 
+            val a = extrude(targ, lvl, false)
+            val b = extrude(targ, lvl, true)
+            implicit val r: Raise = throw _
+            implicit val p: TP = noProv
+            constrain(a, b)
+            TypeBounds.mk(a, b)
+            */
           case (S(pol), targ) => extrude(targ, lvl, pol)
         })(tr.prov)
     }
@@ -620,7 +638,7 @@ class ConstraintSolver extends NormalForms { self: Typer =>
     err(msg -> loco :: Nil)
   }
   def err(msgs: List[Message -> Opt[Loc]])(implicit raise: Raise): SimpleType = {
-    raise(TypeError(msgs))
+    raise(ErrorReport(msgs))
     errType
   }
   def errType: SimpleType = ClassTag(ErrTypeId, Set.empty)(noProv)
@@ -629,7 +647,7 @@ class ConstraintSolver extends NormalForms { self: Typer =>
     warn(msg -> loco :: Nil)
 
   def warn(msgs: List[Message -> Opt[Loc]])(implicit raise: Raise): Unit =
-    raise(Warning(msgs))
+    raise(WarningReport(msgs))
   
   
   // Note: maybe this and `extrude` should be merged?
@@ -644,7 +662,7 @@ class ConstraintSolver extends NormalForms { self: Typer =>
         case Some(tv) => tv
         case None if rigidify =>
           val rv = TraitTag( // Rigid type variables (ie, skolems) are encoded as TraitTag-s
-            Var(tv.nameHint.getOrElse("_"+freshVar(noProv).toString).toString))(tv.prov)
+            Var(tv.nameHint.getOrElse("_"+freshVar(noProv).toString)))(tv.prov)
           if (tv.lowerBounds.nonEmpty || tv.upperBounds.nonEmpty) {
             // The bounds of `tv` may be recursive (refer to `tv` itself),
             //    so here we create a fresh variabe that will be able to tie the presumed recursive knot
@@ -684,6 +702,7 @@ class ConstraintSolver extends NormalForms { self: Typer =>
       case t @ RecordType(fs) => RecordType(fs.mapValues(_.update(freshen, freshen)))(t.prov)
       case t @ TupleType(fs) => TupleType(fs.mapValues(_.update(freshen, freshen)))(t.prov)
       case t @ ArrayType(ar) => ArrayType(ar.update(freshen, freshen))(t.prov)
+      case t @ SpliceType(fs) => t.updateElems(freshen, freshen, freshen, t.prov)
       case n @ NegType(neg) => NegType(freshen(neg))(n.prov)
       case e @ ExtrType(_) => e
       case p @ ProvType(und) => ProvType(freshen(und))(p.prov)

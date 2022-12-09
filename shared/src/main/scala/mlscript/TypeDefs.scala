@@ -8,7 +8,7 @@ import scala.annotation.tailrec
 import mlscript.utils._, shorthands._
 import mlscript.Message._
 
-class TypeDefs extends ConstraintSolver { self: Typer =>
+class TypeDefs extends NuTypeDefs { self: Typer =>
   import TypeProvenance.{apply => tp}
   
   
@@ -24,6 +24,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
    * @param mthDefs method definitions in a class or interface, not relevant for type alias
    * @param baseClasses base class if the class or interface inherits from any
    * @param toLoc source location related information
+   * @param positionals positional term parameters of the class
    */
   case class TypeDef(
     kind: TypeDefKind,
@@ -35,6 +36,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
     mthDefs: List[MethodDef[Left[Term, Type]]],
     baseClasses: Set[TypeName],
     toLoc: Opt[Loc],
+    positionals: Ls[Str],
   ) {
     def allBaseClasses(ctx: Ctx)(implicit traversed: Set[TypeName]): Set[TypeName] =
       baseClasses.map(v => TypeName(v.name.decapitalize)) ++
@@ -141,7 +143,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
       case Without(base, ns) => fieldsOf(base, paramTags).filter(ns contains _._1)
       case TypeBounds(lb, ub) => fieldsOf(ub, paramTags)
       case _: ObjectTag | _: FunctionType | _: ArrayBase | _: TypeVariable
-        | _: NegType | _: ExtrType | _: ComposedType => Map.empty
+        | _: NegType | _: ExtrType | _: ComposedType | _: SpliceType => Map.empty
     }
   }
   // ()
@@ -163,7 +165,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
       if (primitiveTypes.contains(n)) {
         err(msg"Type name '$n' is reserved.", td.nme.toLoc)
       }
-      td.tparams.groupBy(_.name).foreach { case s -> tps if tps.size > 1 => err(
+      td.tparams.groupBy(_.name).foreach { case s -> tps if tps.sizeIs > 1 => err(
           msg"Multiple declarations of type parameter ${s} in ${td.kind.str} definition" -> td.toLoc
             :: tps.map(tp => msg"Declared at" -> tp.toLoc))
         case _ =>
@@ -179,7 +181,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
           val (bodyTy, tvars) = 
             typeType2(td.body, simplify = false)(ctx.copy(lvl = 0), raise, tparamsargs.map(_.name -> _).toMap, newDefsInfo)
           val td1 = TypeDef(td.kind, td.nme, tparamsargs.toList, tvars, bodyTy,
-            td.mthDecls, td.mthDefs, baseClassesOf(td), td.toLoc)
+            td.mthDecls, td.mthDefs, baseClassesOf(td), td.toLoc, td.positionals.map(_.name))
           allDefs += n -> td1
           S(td1)
       }
@@ -199,7 +201,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
             td.mthDefs.iterator.map(md => md.nme.copy().withLocOf(md)).toSet)
           ) { case ((decls1, defns1), (decls2, defns2)) => (
             (decls1.toSeq ++ decls2.toSeq).groupBy(identity).map { case (mn, mns) =>
-              if (mns.size > 1) Var(mn.name).withLoc(td.toLoc) else mn }.toSet,
+              if (mns.sizeIs > 1) Var(mn.name).withLoc(td.toLoc) else mn }.toSet,
             defns1 ++ defns2
           )}
         
@@ -219,12 +221,15 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
             val t2 = travsersed + R(tv)
             tv.lowerBounds.forall(checkCycle(_)(t2)) && tv.upperBounds.forall(checkCycle(_)(t2))
           }
-          case _: ExtrType | _: ObjectTag | _: FunctionType | _: RecordType | _: ArrayBase => true
+          case _: ExtrType | _: ObjectTag | _: FunctionType | _: RecordType | _: ArrayBase | _: SpliceType => true
         }
         // }()
         
         val rightParents = td.kind match {
           case Als => checkCycle(td.bodyTy)(Set.single(L(td.nme)))
+          case Nms =>
+            err(msg"a namespace cannot inherit from others", prov.loco)
+            false
           case k: ObjDefKind =>
             val parentsClasses = MutSet.empty[TypeRef]
             def checkParents(ty: SimpleType): Bool = ty match {
@@ -244,6 +249,9 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
                     } else
                       checkParents(tr.expand)
                   case Trt => checkParents(tr.expand)
+                  case Nms =>
+                    err(msg"cannot inherit from a namespace", prov.loco)
+                    false
                   case Als => 
                     err(msg"cannot inherit from a type alias", prov.loco)
                     false
@@ -266,6 +274,9 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
                 false
               case _: ArrayType => 
                 err(msg"cannot inherit from a array type", prov.loco)
+                false
+              case _: SpliceType =>
+                err(msg"cannot inherit from a splice type", prov.loco)
                 false
               case _: Without =>
                 err(msg"cannot inherit from a field removal type", prov.loco)
@@ -326,7 +337,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
                         singleTup(tv), tv & nomTag & RecordType.mk(tparamTags)(noProv)
                       )(originProv(td.nme.toLoc, "trait constructor", td.nme.name)))
                   }
-                  ctx += n.name -> ctor
+                  ctx += n.name -> VarSymbol(ctor, Var(n.name))
               }
               true
             }
@@ -480,7 +491,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
           def go(md: MethodDef[_ <: Term \/ Type]): (Str, MethodType) = {
             val thisTag = TraitTag(Var("this"))(noProv)
             val thisTy = thisTag & tr
-            thisCtx += "this" -> thisTy
+            thisCtx += "this" -> VarSymbol(thisTy, Var("this"))
             val MethodDef(rec, prt, nme, tparams, rhs) = md
             val prov: TypeProvenance = tp(md.toLoc,
               (if (!top) "inherited " else "")
@@ -496,7 +507,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
                 case N =>
               }
               tparams.groupBy(_.name).foreach {
-                case s -> tps if tps.size > 1 => err(
+                case s -> tps if tps.sizeIs > 1 => err(
                   msg"Multiple declarations of type parameter ${s} in ${prov.desc}" -> md.toLoc ::
                   tps.map(tp => msg"Declared at" -> tp.toLoc))
                 case _ =>
@@ -649,6 +660,11 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
           case TupleType(fields) => fields.foreach {
               case (_ , fieldTy) => fieldVarianceHelper(fieldTy)
             }
+          case SpliceType(elems) =>
+            elems.foreach {
+              case L(ty) => updateVariance(ty, curVariance)
+              case R(fld) => fieldVarianceHelper(fld)
+            }
           case FunctionType(lhs, rhs) =>
             updateVariance(lhs, curVariance.flip)
             updateVariance(rhs, curVariance)
@@ -674,7 +690,7 @@ class TypeDefs extends ConstraintSolver { self: Typer =>
       val visitedSet: MutSet[Bool -> TypeVariable] = MutSet()
       varianceUpdated = false;
       tyDefs.foreach {
-        case t @ TypeDef(k, nme, _, _, body, mthDecls, mthDefs, _, _) =>
+        case t @ TypeDef(k, nme, _, _, body, mthDecls, mthDefs, _, _, _) =>
           trace(s"${k.str} ${nme.name}  ${
                 t.tvarVariances.getOrElse(die).iterator.map(kv => s"${kv._2} ${kv._1}").mkString("  ")}") {
             updateVariance(body, VarianceInfo.co)(t, visitedSet)

@@ -12,7 +12,7 @@ def originalCons = Cons  // Note: type still seems over-complicated because we p
 
 def Nil = Nil {}
 //│ Nil: Nil
-//│    = Nil {}
+//│    = [Function: Nil1]
 
 def Cons head tail = Cons { head; tail }
 //│ Cons: ('head & 'A) -> (List['A] & 'tail) -> (Cons['A] with {head: 'head, tail: 'tail})
@@ -23,11 +23,11 @@ Cons 2
 //│ res: (List['A] & 'tail) -> (Cons[2 | 'A] with {head: 2, tail: 'tail})
 //│    = [Function (anonymous)]
 
-def c = Cons 2 Nil
+c = Cons 2 Nil
 //│ c: Cons[2] with {tail: Nil}
 //│  = Cons { head: 2, tail: Nil {} }
 
-def d = Cons 1 c
+d = Cons 1 c
 //│ d: Cons[1 | 2] with {head: 1, tail: Cons[2] with {tail: Nil}}
 //│  = Cons { head: 1, tail: Cons { head: 2, tail: Nil {} } }
 
@@ -91,7 +91,7 @@ def Cons head tail = originalCons { head; tail } with { head; tail }
 
 
 Cons 2
-//│ res: (List['A] & 'tail) -> (Cons[2 | 'A] with {head: 2, tail: 'tail})
+//│ res: (List['A] & 'tail) -> (Cons[2 | 'A] & {head: 2, tail: 'tail})
 //│    = [Function (anonymous)]
 
 Cons 2 Nil
@@ -152,6 +152,20 @@ Cons 1 (id res)
 //│    = { a: 1, b: 2, c: Nil {} }
 
 
+
+rec def filter p ls = case ls of
+  { Cons -> if p ls.head then Cons ls.head (filter p ls.tail) else filter p ls.tail
+  | Nil -> Nil
+  }
+//│ filter: ('head -> bool) -> 'a -> 'b
+//│   where
+//│     'b :> (Cons['head] with {tail: 'b}) | Nil
+//│     'a <: (Cons[?] with {head: 'head, tail: 'a}) | Nil
+//│       = [Function: filter]
+
+
+
+
 def Cons head = originalCons { head=0; tail=Nil } with { head }
 //│ Cons: 'a -> (Cons[0] with {head: 'a, tail: Nil})
 //│     = [Function: Cons3]
@@ -164,7 +178,7 @@ res.head
 //│ res: 1
 //│    = 1
 
-def c = Cons 1
+c = Cons 1
 //│ c: Cons[0] with {head: 1, tail: Nil}
 //│  = Cons { head: 1, tail: Nil {} }
 

@@ -7,7 +7,7 @@ class C: { x: 0 | 1 }
 
 
 A { x = 1 }
-//│ res: {x: 1} & a
+//│ res: {x: 1} & #A
 //│    = { x: 1 }
 
 :e
@@ -21,7 +21,7 @@ A {}
 //│ ╟── Note: constraint arises from record type:
 //│ ║  l.1: 	trait A: { x: int }
 //│ ╙──     	         ^^^^^^^^^^
-//│ res: error | a
+//│ res: error | #A
 //│    = {}
 
 
@@ -39,17 +39,17 @@ error: A & B
 //│   Error: unexpected runtime error
 
 :e
-def dv = D{}
+dv = D{}
 //│ ╔══[ERROR] Type mismatch in application:
-//│ ║  l.42: 	def dv = D{}
-//│ ║        	         ^^^
+//│ ║  l.42: 	dv = D{}
+//│ ║        	     ^^^
 //│ ╟── record literal of type `anything` is not a record (expected a record with fields: y, x)
-//│ ║  l.42: 	def dv = D{}
-//│ ╙──      	          ^^
+//│ ║  l.42: 	dv = D{}
+//│ ╙──      	      ^^
 //│ dv: D & {x: nothing, y: nothing} | error
 //│   = D { x: undefined, y: undefined }
 
-def dv = D { x = 0; y = "hello" }
+dv = D { x = 0; y = "hello" }
 //│ dv: D & {x: 0, y: "hello"}
 //│   = D { x: 0, y: 'hello' }
 
@@ -59,8 +59,8 @@ dv: nothing
 //│ ║  l.57: 	dv: nothing
 //│ ║        	^^
 //│ ╟── application of type `D with {x: ?x, y: ?y}` does not match type `nothing`
-//│ ║  l.52: 	def dv = D { x = 0; y = "hello" }
-//│ ║        	         ^^^^^^^^^^^^^^^^^^^^^^^^
+//│ ║  l.52: 	dv = D { x = 0; y = "hello" }
+//│ ║        	     ^^^^^^^^^^^^^^^^^^^^^^^^
 //│ ╟── but it flows into reference with expected type `nothing`
 //│ ║  l.57: 	dv: nothing
 //│ ║        	^^
@@ -106,7 +106,7 @@ E{}
 //│ res: E & {x: nothing} | error
 //│    = E {}
 
-def ev = E { x = 1 }
+ev = E { x = 1 }
 ev: C
 //│ ev: E & {x: 1}
 //│   = E {}
@@ -122,10 +122,10 @@ def t = T1 (A { x = 1 })
 //│ ╔══[ERROR] Type mismatch in application:
 //│ ║  l.121: 	def t = T1 (A { x = 1 })
 //│ ║         	        ^^^^^^^^^^^^^^^^
-//│ ╟── record literal of type `{x: 1}` does not match type `C | ~a`
+//│ ╟── record literal of type `{x: 1}` does not match type `C | ~#A`
 //│ ║  l.121: 	def t = T1 (A { x = 1 })
 //│ ║         	              ^^^^^^^^^
-//│ ╟── but it flows into application with expected type `C | ~a`
+//│ ╟── but it flows into application with expected type `C | ~#A`
 //│ ║  l.121: 	def t = T1 (A { x = 1 })
 //│ ║         	            ^^^^^^^^^^^
 //│ ╟── Note: constraint arises from type reference:
@@ -134,18 +134,18 @@ def t = T1 (A { x = 1 })
 //│ ╟── from intersection type:
 //│ ║  l.117: 	trait T1: C & A
 //│ ╙──       	          ^^^^^
-//│ t: error | {x: 1} & a & t1
-//│  = { x: 1 }
+//│ t: error | {x: 1} & #A & #T1
+//│  = [Function: t]
 
-def t = T1 (A (C { x = 1 }))
-//│ t: C & {x: 1} & a & t1
+t = T1 (A (C { x = 1 }))
+//│ t: C & {x: 1} & #A & #T1
 //│  = C { x: 1 }
 
 class CA: C & A
 //│ Defined class CA
 
-def t = T1 (CA { x = 1 })
-//│ t: CA & {x: 1} & t1
+t = T1 (CA { x = 1 })
+//│ t: CA & {x: 1} & #T1
 //│  = CA { x: 1 }
 
 
@@ -153,17 +153,17 @@ class C1: B & T1 & { y: "hi" | "hello" }
 //│ Defined class C1
 
 :e
-def c1 = C1 { }
+c1 = C1 { }
 //│ ╔══[ERROR] Type mismatch in application:
-//│ ║  l.156: 	def c1 = C1 { }
-//│ ║         	         ^^^^^^
+//│ ║  l.156: 	c1 = C1 { }
+//│ ║         	     ^^^^^^
 //│ ╟── record literal of type `anything` is not a record (expected a record with fields: y, x)
-//│ ║  l.156: 	def c1 = C1 { }
-//│ ╙──       	            ^^^
+//│ ║  l.156: 	c1 = C1 { }
+//│ ╙──       	        ^^^
 //│ c1: C1 & {x: nothing, y: nothing} | error
 //│   = C1 { y: undefined, x: undefined }
 
-def c1 = C1 { x = 1; y = "hi" }
+c1 = C1 { x = 1; y = "hi" }
 //│ c1: C1 & {x: 1, y: "hi"}
 //│   = C1 { y: 'hi', x: 1 }
 

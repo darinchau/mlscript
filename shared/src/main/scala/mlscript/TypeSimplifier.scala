@@ -210,8 +210,12 @@ trait TypeSimplifier { self: Typer =>
                 val withType = if (needsWith) if (cleanedRcd.fields.isEmpty) withoutType
                   else WithType(withoutType, cleanedRcd.sorted)(noProv) else typeRef & cleanedRcd.sorted
                 
-                tts.toArray.sorted // TODO also filter out tts that are inherited by the class
+                val withTraits = tts.toArray.sorted // TODO also filter out tts that are inherited by the class
                   .foldLeft(withType: ST)(_ & _)
+                
+                val trs3 = trs2 - td.nme // TODO also filter out class refs that are inherited by the class
+                
+                trs3.valuesIterator.foldLeft(withTraits)(_ & _)
                 
               case _ =>
                 lazy val nFields = rcd.fields
@@ -243,6 +247,8 @@ trait TypeSimplifier { self: Typer =>
                     S(FunctionType(go(l, pol.map(!_)), go(r, pol))(ft.prov)) -> nFields
                   case S(at @ ArrayType(inner)) =>
                     S(ArrayType(inner.update(go(_, pol.map(!_)), go(_, pol)))(at.prov)) -> nFields
+                  case S(sp @ SpliceType(elems)) =>
+                    S(sp.updateElems(go(_, pol), go(_, pol.map(!_)), go(_, pol))) -> nFields
                   case S(wt @ Without(b: ComposedType, ns @ empty())) =>
                     S(Without(b.map(go(_, pol)), ns)(wt.prov)) -> nFields // FIXME very hacky
                   case S(wt @ Without(b, ns)) => S(Without(go(b, pol), ns)(wt.prov)) -> nFields
@@ -357,6 +363,12 @@ trait TypeSimplifier { self: Typer =>
       case ArrayType(inner) =>
         inner.lb.foreach(analyze2(_, !pol))
         analyze2(inner.ub, pol)
+      case SpliceType(elems) => elems.foreach {
+        case L(l) => analyze2(l, pol)
+        case R(r) => 
+          r.lb.foreach(analyze2(_, !pol))
+          analyze2(r.ub, pol)
+      }
       case FunctionType(l, r) => analyze2(l, !pol); analyze2(r, pol)
       case tv: TypeVariable => process(tv, pol)
       case _: ObjectTag | ExtrType(_) => ()
@@ -425,7 +437,7 @@ trait TypeSimplifier { self: Typer =>
     // *  (We may unfy a non-rec TV with a rec one, makingthe non-rec TV recursive.)
     
     // * This will be filled during the processing phase, to guide the transformation phase:
-    val varSubst = MutMap.empty[TypeVariable, Option[TypeVariable]]
+    val varSubst = MutMap.empty[TypeVariable, Option[ST]]
     
     // val allVars = st.getVars
     val allVars = analyzed1.iterator.map(_._1).toSortedSet
@@ -470,7 +482,11 @@ trait TypeSimplifier { self: Typer =>
           && coOccurrences.get(false -> v).exists(_(atom))
         =>
           println(s"  [..] $v ${atom}")
-          varSubst += v -> None; ()
+          val bundle = TypeBounds.mk(
+              v.upperBounds.foldLeft(atom)(_ & _),
+              v.lowerBounds.foldLeft(atom)(_ | _),
+            )
+          varSubst += v -> S(bundle)
         
         case w: TV if !(w is v) && !varSubst.contains(w) && !varSubst.contains(v) && !recVars(v)
           && coOccurrences.get(false -> v).exists(_(w))
@@ -486,7 +502,11 @@ trait TypeSimplifier { self: Typer =>
           // } else {
           
           println(s"  [..] $v ${w}")
-          varSubst += v -> N
+          val bundle = TypeBounds.mk(
+              v.upperBounds.foldLeft(w: ST)(_ & _),
+              v.lowerBounds.foldLeft(w: ST)(_ | _),
+            )
+          varSubst += v -> S(bundle)
           
           // }
           
@@ -495,50 +515,80 @@ trait TypeSimplifier { self: Typer =>
     }}
     
     // * Unify equivalent variables based on polar co-occurrence analysis:
-    { val pols = true :: false :: Nil; allVars.foreach { case v => if (!varSubst.contains(v)) {
-      println(s"3[v] $v ${coOccurrences.get(true -> v)} ${coOccurrences.get(false -> v)}")
-      
-      pols.foreach { pol =>
-        coOccurrences.get(pol -> v).iterator.flatMap(_.iterator).foreach {
-          case w: TypeVariable if !(w is v) && !varSubst.contains(w)
+    allVars.foreach { case v =>
+      if (!varSubst.contains(v))
+        trace(s"3[v] $v +${coOccurrences.get(true -> v).mkString} -${coOccurrences.get(false -> v).mkString}") {
+        
+        def go(pol: Bool): Unit = coOccurrences.get(pol -> v).iterator.flatMap(_.iterator).foreach {
+          
+          case w: TypeVariable if !(w is v) && !varSubst.contains(w) //&& (if (pol) )
               // && (recVars.contains(v) === recVars.contains(w))
               // * ^ Note: We no longer avoid merging rec and non-rec vars,
               // *    even though the non-rec one may not be strictly polar (as an example of this, see [test:T1]).
-              && (v.nameHint.nonEmpty || w.nameHint.isEmpty)
+              // *    We may introduce recursive types anyway so the `recVars` info here is no longer up to date.
+              && (v.nameHint.nonEmpty || w.nameHint.isEmpty
               // * ^ Don't merge in this direction if that would override a nameHint
+                || varSubst.contains(v) // * we won't be able to do it the other way
+                // || varSubst.contains(v)
+              )
             =>
-            println(s"  [w] $w ${coOccurrences.get(pol -> w)}")
-            if (coOccurrences.get(pol -> w).forall(_(v))) {
+            trace(s"[w] $w ${printPol(S(pol))}${coOccurrences.get(pol -> w).mkString}") {
               
-              // * Unify w into v
+              // * The bounds opposite to the polarity where the two variables co-occur
+              val otherBounds = (if (pol) v.upperBounds else v.lowerBounds)
+              val otherBounds2 = (if (pol) w.upperBounds else w.lowerBounds)
               
-              println(s"  [U] $w := $v")
+              if (otherBounds =/= otherBounds2)
+                // * ^ This is a bit of an ugly heuristic to simplify a couple of niche situations...
+                // *    More principled/regular approaches could be to either:
+                // *      1. just not merge things with other bounds; or
+                // *      2. merge non-recursive things with other bounds but be more careful in the `transform` part
+                // *        that we don't import these other bounds when inlining bounds...
+                // *    Choice (2.) seems tricky to implement.
+                println(s"$v and $w have non-equal other bounds and won't be merged")
               
-              varSubst += w -> S(v)
-              // * Since w gets unified with v, we need to merge their bounds,
-              // * and also merge the other co-occurrences of v and w from the other polarity (!pol).
-              // * For instance,
-              // *  consider that if we merge v and w in `(v & w) -> v & x -> w -> x`
-              // *  we get `v -> v & x -> v -> x`
-              // *  and the old positive co-occ of v, {v,x} should be changed to just {v,x} & {w,v} == {v}!
-              recVars -= w
-              v.lowerBounds :::= w.lowerBounds
-              v.upperBounds :::= w.upperBounds
-              
-              // * When removePolarVars is enabled, wCoOcss/vCoOcss may not be defined:
-              coOccurrences.get((!pol) -> w).foreach { wCoOccs =>
-                coOccurrences.get((!pol) -> v) match {
-                  case S(vCoOccs) => vCoOccs.filterInPlace(t => t === v || wCoOccs(t))
-                  case N => coOccurrences((!pol) -> v) = wCoOccs
+              else if (coOccurrences.get(pol -> w).forall(_(v))) {
+                
+                // * Unify w into v
+                
+                println(s"  [U] $w := $v")
+                
+                varSubst += w -> S(v)
+                
+                // * Since w gets unified with v, we need to merge their bounds,
+                // * and also merge the other co-occurrences of v and w from the other polarity (!pol).
+                // * For instance,
+                // *  consider that if we merge v and w in `(v & w) -> v & x -> w -> x`
+                // *  we get `v -> v & x -> v -> x`
+                // *  and the old positive co-occ of v, {v,x} should be changed to just {v,x} & {w,v} == {v}!
+                v.lowerBounds :::= w.lowerBounds
+                v.upperBounds :::= w.upperBounds
+                
+                // TODO when we have `assignedTo` use that instead here?
+                w.lowerBounds = v :: Nil
+                w.upperBounds = v :: Nil
+                
+                // * When removePolarVars is enabled, wCoOcss/vCoOcss may not be defined:
+                coOccurrences.get((!pol) -> w).foreach { wCoOccs =>
+                  coOccurrences.get((!pol) -> v) match {
+                    case S(vCoOccs) => vCoOccs.filterInPlace(t => t === v || wCoOccs(t))
+                    case N => coOccurrences((!pol) -> v) = wCoOccs
+                  }
                 }
+                
               }
               
-            }
+            }()
+            
           case _ =>
+          
         }
-      }
-      
-    }}}
+        
+        go(true)
+        go(false)
+        
+      }()
+    }
     
     println(s"[sub] ${varSubst.map(k => k._1.toString + " -> " + k._2).mkString(", ")}")
     println(s"[bounds] ${st.showBounds}")
@@ -549,7 +599,7 @@ trait TypeSimplifier { self: Typer =>
     // * applying the var substitution and simplifying some things on the fly.
     
     // * The recursive vars may have changed due to the previous phase!
-    recVars = MutSet.from(allVars.iterator.filterNot(varSubst.contains).filter(_.isRecursive_$))
+    recVars = MutSet.from(allVars.iterator.filter(v => !varSubst.contains(v) && v.isRecursive_$))
     println(s"[rec] ${recVars}")
     
     val renewals = MutMap.empty[TypeVariable, TypeVariable]
@@ -569,19 +619,22 @@ trait TypeSimplifier { self: Typer =>
       case RecordType(fs) => RecordType(fs.mapValues(_ |> transformField))(st.prov)
       case TupleType(fs) => TupleType(fs.mapValues(_ |> transformField))(st.prov)
       case ArrayType(inner) => ArrayType(inner |> transformField)(st.prov)
+      case sp @ SpliceType(elems) => SpliceType(elems map {
+        case L(l) => L(transform(l, pol, N)) 
+        case R(r) => R(transformField(r))})(st.prov)
       case FunctionType(l, r) => FunctionType(transform(l, pol.map(!_), N), transform(r, pol, N))(st.prov)
       case _: ObjectTag | ExtrType(_) => st
       case tv: TypeVariable if parent.exists(_ === tv) =>
         if (pol.getOrElse(lastWords(s"parent in invariant position $tv $parent"))) BotType else TopType
       case tv: TypeVariable =>
         varSubst.get(tv) match {
-          case S(S(ty)) =>
-            println(s"-> $ty"); 
-            transform(ty, pol, parent)
+          case S(S(tv)) =>
+            println(s"-> $tv")
+            transform(tv, pol, parent)
           case S(N) =>
-            println(s"-> bound");
+            println(s"-> bound")
             pol.fold(
-              TypeBounds.mk(mergeTransform(true, tv, parent), mergeTransform(false, tv, parent))
+              lastWords("Should not be replacing an invariant type variable by its bound...")
             )(mergeTransform(_, tv, parent))
           case N =>
             var wasDefined = true

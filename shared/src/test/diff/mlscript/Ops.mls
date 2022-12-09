@@ -1,28 +1,31 @@
 
 :p
 2 + 2
-//│ Parsed: ((+ (2,)) (2,));
-//│ Desugared: ((+ (2,)) (2,))
+//│ Parsed: + (2,) (2,);
+//│ Desugared: + (2,) (2,)
+//│ AST: App(App(Var(+), Tup(_: IntLit(2))), Tup(_: IntLit(2)))
 //│ res: int
 //│    = 4
 
 :p
 1 + 2 * 2 + 3
-//│ Parsed: ((+ (((+ (1,)) (((* (2,)) (2,)),)),)) (3,));
-//│ Desugared: ((+ (((+ (1,)) (((* (2,)) (2,)),)),)) (3,))
+//│ Parsed: + (+ (1,) (* (2,) (2,),),) (3,);
+//│ Desugared: + (+ (1,) (* (2,) (2,),),) (3,)
+//│ AST: App(App(Var(+), Tup(_: App(App(Var(+), Tup(_: IntLit(1))), Tup(_: App(App(Var(*), Tup(_: IntLit(2))), Tup(_: IntLit(2))))))), Tup(_: IntLit(3)))
 //│ res: int
 //│    = 8
 
 :e
 :p
 1 + 2 / 2 + 3
-//│ Parsed: ((+ (((+ (1,)) (((/ (2,)) (2,)),)),)) (3,));
-//│ Desugared: ((+ (((+ (1,)) (((/ (2,)) (2,)),)),)) (3,))
+//│ Parsed: + (+ (1,) (/ (2,) (2,),),) (3,);
+//│ Desugared: + (+ (1,) (/ (2,) (2,),),) (3,)
+//│ AST: App(App(Var(+), Tup(_: App(App(Var(+), Tup(_: IntLit(1))), Tup(_: App(App(Var(/), Tup(_: IntLit(2))), Tup(_: IntLit(2))))))), Tup(_: IntLit(3)))
 //│ ╔══[ERROR] Type mismatch in operator application:
-//│ ║  l.18: 	1 + 2 / 2 + 3
+//│ ║  l.20: 	1 + 2 / 2 + 3
 //│ ║        	^^^^^^^^^
 //│ ╟── operator application of type `number` is not an instance of type `int`
-//│ ║  l.18: 	1 + 2 / 2 + 3
+//│ ║  l.20: 	1 + 2 / 2 + 3
 //│ ╙──      	    ^^^^^
 //│ res: int
 //│    = 5
@@ -31,16 +34,17 @@
 :ge
 :p
 1 |> 2 || 3
-//│ Parsed: ((|| (((|> (1,)) (2,)),)) (3,));
-//│ Desugared: ((|| (((|> (1,)) (2,)),)) (3,))
+//│ Parsed: || (|> (1,) (2,),) (3,);
+//│ Desugared: || (|> (1,) (2,),) (3,)
+//│ AST: App(App(Var(||), Tup(_: App(App(Var(|>), Tup(_: IntLit(1))), Tup(_: IntLit(2))))), Tup(_: IntLit(3)))
 //│ ╔══[ERROR] identifier not found: |>
-//│ ║  l.33: 	1 |> 2 || 3
+//│ ║  l.36: 	1 |> 2 || 3
 //│ ╙──      	  ^^
 //│ ╔══[ERROR] Type mismatch in operator application:
-//│ ║  l.33: 	1 |> 2 || 3
+//│ ║  l.36: 	1 |> 2 || 3
 //│ ║        	^^^^^^^^^^^
 //│ ╟── integer literal of type `3` is not an instance of type `bool`
-//│ ║  l.33: 	1 |> 2 || 3
+//│ ║  l.36: 	1 |> 2 || 3
 //│ ╙──      	          ^
 //│ res: bool | error
 //│ Code generation encountered an error:
@@ -48,8 +52,9 @@
 
 :p
 true || false && true || false
-//│ Parsed: ((|| (((|| (true,)) (((&& (false,)) (true,)),)),)) (false,));
-//│ Desugared: ((|| (((|| (true,)) (((&& (false,)) (true,)),)),)) (false,))
+//│ Parsed: || (|| (true,) (&& (false,) (true,),),) (false,);
+//│ Desugared: || (|| (true,) (&& (false,) (true,),),) (false,)
+//│ AST: App(App(Var(||), Tup(_: App(App(Var(||), Tup(_: Var(true))), Tup(_: App(App(Var(&&), Tup(_: Var(false))), Tup(_: Var(true))))))), Tup(_: Var(false)))
 //│ res: bool
 //│    = true
 
@@ -58,8 +63,8 @@ true || false && true || false
 
 :pe
 -1
-//│ /!\ Parse error: Expected end-of-input:1:1, found "-1;" at l.60:1: -1
+//│ /!\ Parse error: Expected end-of-input:1:1, found "-1;" at l.65:1: -1
 
 :pe
 - 1
-//│ /!\ Parse error: Expected end-of-input:1:1, found "- 1;" at l.64:1: - 1
+//│ /!\ Parse error: Expected end-of-input:1:1, found "- 1;" at l.69:1: - 1

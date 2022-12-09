@@ -2,13 +2,13 @@ import Wart._
 
 enablePlugins(ScalaJSPlugin)
 
-ThisBuild / scalaVersion     := "2.13.8"
+ThisBuild / scalaVersion     := "2.13.9"
 ThisBuild / version          := "0.1.0-SNAPSHOT"
 ThisBuild / organization     := "io.lptk"
 ThisBuild / organizationName := "LPTK"
 
 lazy val root = project.in(file("."))
-  .aggregate(mlscriptJS, mlscriptJVM)
+  .aggregate(mlscriptJS, mlscriptJVM, ts2mlsJS, compilerJVM)
   .settings(
     publish := {},
     publishLocal := {},
@@ -35,13 +35,11 @@ lazy val mlscript = crossProject(JSPlatform, JVMPlatform).in(file("."))
       StringPlusAny, Any,
       JavaSerializable, Serializable, Product,
       LeakingSealed, Overloading,
-      Option2Iterable, TraversableOps, ListAppend
+      Option2Iterable, IterableOps, ListAppend
     ),
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.12" % Test,
-    libraryDependencies += "com.lihaoyi" %%% "sourcecode" % "0.2.8",
+    libraryDependencies += "com.lihaoyi" %%% "sourcecode" % "0.3.0",
     libraryDependencies += "com.lihaoyi" %%% "fastparse" % "2.3.3",
-    libraryDependencies += "com.lihaoyi" %% "fansi" % "0.2.14",
-    // libraryDependencies += "com.lihaoyi" %%% "fansi" % "0.2.7", // FIXME does not resolve — why?
     libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.8.0",
     // 
     watchSources += WatchSource(
@@ -63,5 +61,44 @@ lazy val mlscript_codegen = crossProject(JSPlatform, JVMPlatform).in(file("codeg
     name := "mlscript-codegen",
     scalaVersion := "3.1.3",
     sourceDirectory := baseDirectory.value.getParentFile()/"shared",
+    watchSources += WatchSource(
+      baseDirectory.value.getParentFile()/"shared"/"test"/"diff", "*.mls", NothingFilter),
   )
   .dependsOn(mlscript)
+
+lazy val ts2mls = crossProject(JSPlatform, JVMPlatform).in(file("ts2mls"))
+  .settings(
+    name := "ts2mls",
+    scalaVersion := "2.13.8",
+    scalacOptions ++= Seq(
+      "-deprecation"
+    )
+  )
+  .jvmSettings()
+  .jsSettings(
+    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.12" % "test"
+  )
+  .dependsOn(mlscript % "compile->compile;test->test")
+
+lazy val ts2mlsJS = ts2mls.js
+lazy val ts2mlsJVM = ts2mls.jvm
+
+val tsTypeDiffTests = taskKey[Unit]("")
+
+tsTypeDiffTests := (Def.task{
+  (ts2mlsJVM / Test / test).value
+} triggeredBy (ts2mlsJS / Test / test)).value
+
+lazy val compiler = crossProject(JSPlatform, JVMPlatform).in(file("compiler"))
+  .settings(
+    name := "mlscript-compiler",
+    scalaVersion := "3.1.3",
+    sourceDirectory := baseDirectory.value.getParentFile()/"shared",
+    watchSources += WatchSource(
+      baseDirectory.value.getParentFile()/"shared"/"test"/"diff", "*.mls", NothingFilter),
+  )
+  .dependsOn(mlscript % "compile->compile;test->test")
+
+lazy val compilerJVM = compiler.jvm
+lazy val compilerJS = compiler.js
+

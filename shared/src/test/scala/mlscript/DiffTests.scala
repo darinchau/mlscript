@@ -8,23 +8,91 @@ import scala.collection.mutable
 import scala.collection.mutable.{Map => MutMap}
 import scala.collection.immutable
 import mlscript.utils._, shorthands._
-import mlscript.JSTestBackend.IllFormedCode
-import mlscript.JSTestBackend.Unimplemented
-import mlscript.JSTestBackend.UnexpectedCrash
-import mlscript.JSTestBackend.TestCode
 import mlscript.codegen.typescript.TsTypegenCodeBuilder
+import org.scalatest.{funsuite, ParallelTestExecution}
+import org.scalatest.time._
+import org.scalatest.concurrent.{TimeLimitedTests, Signaler}
 
-class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.ParallelTestExecution {
-// class DiffTests extends org.scalatest.funsuite.AnyFunSuite {
+
+abstract class ModeType {
+  def expectTypeErrors: Bool
+  def expectWarnings: Bool
+  def expectParseErrors: Bool
+  def fixme: Bool
+  def showParse: Bool
+  def verbose: Bool
+  def noSimplification: Bool
+  def explainErrors: Bool
+  def dbg: Bool
+  def dbgParsing: Bool
+  def dbgSimplif: Bool
+  def dbgUCS: Bool
+  def fullExceptionStack: Bool
+  def stats: Bool
+  def stdout: Bool
+  def noExecution: Bool
+  def noGeneration: Bool
+  def showGeneratedJS: Bool
+  def generateTsDeclarations: Bool
+  def debugVariance: Bool
+  def expectRuntimeErrors: Bool
+  def expectCodeGenErrors: Bool
+  def showRepl: Bool
+  def allowEscape: Bool
+}
+
+class DiffTests
+  extends funsuite.AnyFunSuite
+  with ParallelTestExecution
+  with TimeLimitedTests
+{
+  
+  
+  /**  Hook for dependent projects, like the monomorphizer. */
+  def postProcess(mode: ModeType, basePath: Ls[Str], testName: Str, unit: TypingUnit): Ls[Str] = Nil
+  
+  
+  private val inParallel = isInstanceOf[ParallelTestExecution]
   
   import DiffTests._
-  files.foreach { file => val fileName = file.baseName; test(fileName) {
+
+  // scala test will not execute a test if the test class has constructor parameters.
+  // override this to get the correct paths of test files.
+  protected lazy val files = allFiles.filter { file =>
+      val fileName = file.baseName
+      // validExt(file.ext) && filter(fileName)
+      validExt(file.ext) && filter(file.relativeTo(pwd))
+  }
+  
+  val timeLimit = TimeLimit
+  
+  override val defaultTestSignaler: Signaler = new Signaler {
+    @annotation.nowarn("msg=method stop in class Thread is deprecated") def apply(testThread: Thread): Unit = {
+      println(s"!! Test at $testThread has run out out time !! stopping..." +
+        "\n\tNote: you can increase this limit by changing DiffTests.TimeLimit")
+      // * Thread.stop() is considered bad practice because normally it's better to implement proper logic
+      // * to terminate threads gracefully, avoiding leaving applications in a bad state.
+      // * But here we DGAF since all the test is doing is runnign a type checker and some Node REPL,
+      // * which would be a much bigger pain to make receptive to "gentle" interruption.
+      // * It would feel extremely wrong to intersperse the pure type checker algorithms
+      // * with ugly `Thread.isInterrupted` checks everywhere...
+      testThread.stop()
+    }
+  }
+  
+  files.foreach { file =>
+        val basePath = file.segments.drop(dir.segmentCount).toList.init
+        val testName = basePath.map(_ + "/").mkString + file.baseName
+        test(testName) {
     
-    val buf = mutable.ArrayBuffer.empty[Char]
-    buf ++= s"Processed  $fileName"
+    val baseStr = basePath.mkString("/")
     
-    // For some reason the color is sometimes wiped out when the line is later updated not in iTerm3:
-    // println(s"${Console.CYAN}Processing $fileName${Console.RESET}... ")
+    val testStr = " " * (8 - baseStr.length) + baseStr + ": " + file.baseName
+    
+    if (!inParallel) print(s"Processing $testStr")
+    
+    // * For some reason, the color is sometimes wiped out when the line is later updated not in iTerm3:
+    // if (!inParallel) print(s"${Console.CYAN}Processing${Console.RESET} $testStr ... ")
     
     val beginTime = System.nanoTime()
     
@@ -68,7 +136,9 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
       noSimplification: Bool = false,
       explainErrors: Bool = false,
       dbg: Bool = false,
+      dbgParsing: Bool = false,
       dbgSimplif: Bool = false,
+      dbgUCS: Bool = false,
       fullExceptionStack: Bool = false,
       stats: Bool = false,
       stdout: Bool = false,
@@ -82,19 +152,23 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
       showRepl: Bool = false,
       allowEscape: Bool = false,
       // noProvs: Bool = false,
-    ) {
+    ) extends ModeType {
       def isDebugging: Bool = dbg || dbgSimplif
     }
     val defaultMode = Mode()
     
+    var parseOnly = basePath.headOption.contains("parser") || basePath.headOption.contains("compiler")
     var allowTypeErrors = false
+    var allowParseErrors = false // TODO use
     var showRelativeLineNums = false
     var noJavaScript = false
     var noProvs = false
     var allowRuntimeErrors = false
+    var newParser = basePath.headOption.contains("parser") || basePath.headOption.contains("compiler")
 
     val backend = new JSTestBackend()
     val host = ReplHost()
+    val codeGenTestHelpers = new CodeGenTestHelpers(file, output)
     
     def rec(lines: List[String], mode: Mode): Unit = lines match {
       case "" :: Nil =>
@@ -106,16 +180,21 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
           case "pe" => mode.copy(expectParseErrors = true)
           case "p" => mode.copy(showParse = true)
           case "d" => mode.copy(dbg = true)
+          case "dp" => mode.copy(dbgParsing = true)
           case "ds" => mode.copy(dbgSimplif = true)
+          case "ducs" => mode.copy(dbg = true, dbgUCS = true)
           case "s" => mode.copy(fullExceptionStack = true)
           case "v" | "verbose" => mode.copy(verbose = true)
           case "ex" | "explain" => mode.copy(expectTypeErrors = true, explainErrors = true)
           case "ns" | "no-simpl" => mode.copy(noSimplification = true)
           case "stats" => mode.copy(stats = true)
           case "stdout" => mode.copy(stdout = true)
+          case "ParseOnly" => parseOnly = true; mode
           case "AllowTypeErrors" => allowTypeErrors = true; mode
+          case "AllowParseErrors" => allowParseErrors = true; mode
           case "AllowRuntimeErrors" => allowRuntimeErrors = true; mode
           case "ShowRelativeLineNums" => showRelativeLineNums = true; mode
+          case "NewParser" => newParser = true; mode
           case "NoJS" => noJavaScript = true; mode
           case "NoProvs" => noProvs = true; mode
           case "ne" => mode.copy(noExecution = true)
@@ -163,6 +242,8 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
         rec(rest.tail, if (hasBlankLines) defaultMode else mode)
       // process block of text and show output - type, expressions, errors
       case l :: ls =>
+        val blockLineNum = (allLines.size - lines.size) + 1
+        
         val block = (l :: ls.takeWhile(l => l.nonEmpty && !(
           l.startsWith(outputMarker)
           || l.startsWith(diffBegMarker)
@@ -173,13 +254,127 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
         val processedBlockStr = processedBlock.mkString
         val fph = new FastParseHelpers(block)
         val globalStartLineNum = allLines.size - lines.size + 1
-
+        
+        var totalTypeErrors = 0
+        var totalParseErrors = 0
+        var totalWarnings = 0
+        var totalRuntimeErrors = 0
+        var totalCodeGenErrors = 0
+        
+        // report errors and warnings
+        def report(diags: Ls[mlscript.Diagnostic], output: Str => Unit = output): Unit = {
+          diags.foreach { diag =>
+            val sctx = Message.mkCtx(diag.allMsgs.iterator.map(_._1), "?")
+            val headStr = diag match {
+              case ErrorReport(msg, loco, src) =>
+                src match {
+                  case Diagnostic.Lexing =>
+                    totalParseErrors += 1
+                    s"╔══[LEXICAL ERROR] "
+                  case Diagnostic.Parsing =>
+                    totalParseErrors += 1
+                    s"╔══[PARSE ERROR] "
+                  case _ => // TODO customize too
+                    totalTypeErrors += 1
+                    s"╔══[ERROR] "
+                }
+              case WarningReport(msg, loco, src) =>
+                totalWarnings += 1
+                s"╔══[WARNING] "
+            }
+            val lastMsgNum = diag.allMsgs.size - 1
+            var globalLineNum = blockLineNum  // solely used for reporting useful test failure messages
+            diag.allMsgs.zipWithIndex.foreach { case ((msg, loco), msgNum) =>
+              val isLast = msgNum =:= lastMsgNum
+              val msgStr = msg.showIn(sctx)
+              if (msgNum =:= 0) output(headStr + msgStr)
+              else output(s"${if (isLast && loco.isEmpty) "╙──" else "╟──"} ${msgStr}")
+              if (loco.isEmpty && diag.allMsgs.size =:= 1) output("╙──")
+              loco.foreach { loc =>
+                val (startLineNum, startLineStr, startLineCol) =
+                  loc.origin.fph.getLineColAt(loc.spanStart)
+                if (globalLineNum =:= 0) globalLineNum += startLineNum - 1
+                val (endLineNum, endLineStr, endLineCol) =
+                  loc.origin.fph.getLineColAt(loc.spanEnd)
+                var l = startLineNum
+                var c = startLineCol
+                while (l <= endLineNum) {
+                  val globalLineNum = loc.origin.startLineNum + l - 1
+                  val relativeLineNum = globalLineNum - blockLineNum + 1
+                  val shownLineNum =
+                    if (showRelativeLineNums && relativeLineNum > 0) s"l.+$relativeLineNum"
+                    else "l." + globalLineNum
+                  val prepre = "║  "
+                  val pre = s"$shownLineNum: "
+                  val curLine = loc.origin.fph.lines(l - 1)
+                  output(prepre + pre + "\t" + curLine)
+                  val tickBuilder = new StringBuilder()
+                  tickBuilder ++= (
+                    (if (isLast && l =:= endLineNum) "╙──" else prepre)
+                    + " " * pre.length + "\t" + " " * (c - 1))
+                  val lastCol = if (l =:= endLineNum) endLineCol else curLine.length + 1
+                  while (c < lastCol) { tickBuilder += ('^'); c += 1 }
+                  if (c =:= startLineCol) tickBuilder += ('^')
+                  output(tickBuilder.toString)
+                  c = 1
+                  l += 1
+                }
+              }
+            }
+            if (diag.allMsgs.isEmpty) output("╙──")
+            
+            if (!mode.fixme) {
+              if (!allowTypeErrors
+                  && !mode.expectTypeErrors && diag.isInstanceOf[ErrorReport] && diag.source =:= Diagnostic.Typing)
+                failures += globalLineNum
+              if (!allowParseErrors
+                  && !mode.expectParseErrors && diag.isInstanceOf[ErrorReport] && (diag.source =:= Diagnostic.Lexing || diag.source =:= Diagnostic.Parsing))
+                failures += globalLineNum
+              if (!allowTypeErrors && !allowParseErrors
+                  && !mode.expectWarnings && diag.isInstanceOf[WarningReport])
+                failures += globalLineNum
+            }
+            
+            ()
+          }
+        }
+        
+        val raise: typer.Raise = d => report(d :: Nil)
+        
         // try to parse block of text into mlscript ast
-        val ans = try parse(processedBlockStr,
-          p => if (file.ext =:= "fun") new Parser(Origin(fileName, globalStartLineNum, fph)).pgrm(p)
-            else new MLParser(Origin(fileName, globalStartLineNum, fph)).pgrm(p),
-          verboseFailures = true)
-        match {
+        val ans = try {
+          if (newParser || basePath.headOption.contains("compiler")) {
+            
+            val origin = Origin(testName, globalStartLineNum, fph)
+            val lexer = new NewLexer(origin, raise, dbg = mode.dbgParsing)
+            
+            val tokens = lexer.bracketedTokens
+            
+            if (mode.showParse || mode.dbgParsing || parseOnly)
+              output(NewLexer.printTokens(tokens))
+            
+            val p = new NewParser(origin, tokens, raise, dbg = mode.dbgParsing, N) {
+              def doPrintDbg(msg: => Str): Unit = if (dbg) output(msg)
+            }
+            val res = p.parseAll(p.typingUnit)
+            
+            if (parseOnly)
+              output("Parsed: " + res.show)
+            
+            postProcess(mode, basePath, testName, res).foreach(output)
+            
+            if (parseOnly)
+              Success(Pgrm(Nil), 0)
+            else
+              Success(Pgrm(res.entities), 0)
+            
+          }
+          else parse(processedBlockStr, p =>
+            if (file.ext =:= "fun") new Parser(Origin(testName, globalStartLineNum, fph)).pgrm(p)
+            else new MLParser(Origin(testName, globalStartLineNum, fph)).pgrm(p),
+            verboseFailures = true
+          )
+        } match {
           case f: Failure =>
             val Failure(lbl, index, extra) = f
             val (lineNum, lineStr, col) = fph.getLineColAt(index)
@@ -188,97 +383,38 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
               failures += globalLineNum
             output("/!\\ Parse error: " + extra.trace().msg +
               s" at l.$globalLineNum:$col: $lineStr")
-
+            
           // successfully parsed block into a valid syntactically valid program
           case Success(p, index) =>
-            val blockLineNum = (allLines.size - lines.size) + 1
-            if (mode.expectParseErrors)
+            if (mode.expectParseErrors && !newParser)
               failures += blockLineNum
-            if (mode.showParse) output("Parsed: " + p)
+            if (mode.showParse || mode.dbgParsing) output("Parsed: " + p)
             // if (mode.isDebugging) typer.resetState()
             if (mode.stats) typer.resetStats()
             typer.dbg = mode.dbg
+            typer.dbgUCS = mode.dbgUCS
             // typer.recordProvenances = !noProvs
             typer.recordProvenances = !noProvs && !mode.dbg && !mode.dbgSimplif || mode.explainErrors
             typer.verbose = mode.verbose
             typer.explainErrors = mode.explainErrors
             stdout = mode.stdout
             
-            var totalTypeErrors = 0
-            var totalWarnings = 0
-            var totalRuntimeErrors = 0
-            var totalCodeGenErrors = 0
-            
-            // report errors and warnings
-            def report(diags: Ls[Diagnostic]): Unit = {
-              diags.foreach { diag =>
-                val sctx = Message.mkCtx(diag.allMsgs.iterator.map(_._1), "?")
-                val headStr = diag match {
-                  case TypeError(msg, loco) =>
-                    totalTypeErrors += 1
-                    s"╔══[ERROR] "
-                  case Warning(msg, loco) =>
-                    totalWarnings += 1
-                    s"╔══[WARNING] "
-                }
-                val lastMsgNum = diag.allMsgs.size - 1
-                var globalLineNum = blockLineNum  // solely used for reporting useful test failure messages
-                diag.allMsgs.zipWithIndex.foreach { case ((msg, loco), msgNum) =>
-                  val isLast = msgNum =:= lastMsgNum
-                  val msgStr = msg.showIn(sctx)
-                  if (msgNum =:= 0) output(headStr + msgStr)
-                  else output(s"${if (isLast && loco.isEmpty) "╙──" else "╟──"} ${msgStr}")
-                  if (loco.isEmpty && diag.allMsgs.size =:= 1) output("╙──")
-                  loco.foreach { loc =>
-                    val (startLineNum, startLineStr, startLineCol) =
-                      loc.origin.fph.getLineColAt(loc.spanStart)
-                    if (globalLineNum =:= 0) globalLineNum += startLineNum - 1
-                    val (endLineNum, endLineStr, endLineCol) =
-                      loc.origin.fph.getLineColAt(loc.spanEnd)
-                    var l = startLineNum
-                    var c = startLineCol
-                    while (l <= endLineNum) {
-                      val globalLineNum = loc.origin.startLineNum + l - 1
-                      val relativeLineNum = globalLineNum - blockLineNum + 1
-                      val shownLineNum =
-                        if (showRelativeLineNums && relativeLineNum > 0) s"l.+$relativeLineNum"
-                        else "l." + globalLineNum
-                      val prepre = "║  "
-                      val pre = s"$shownLineNum: "
-                      val curLine = loc.origin.fph.lines(l - 1)
-                      output(prepre + pre + "\t" + curLine)
-                      out.print(outputMarker
-                        + (if (isLast && l =:= endLineNum) "╙──" else prepre)
-                        + " " * pre.length + "\t" + " " * (c - 1))
-                      val lastCol = if (l =:= endLineNum) endLineCol else curLine.length + 1
-                      while (c < lastCol) { out.print('^'); c += 1 }
-                      out.println
-                      c = 1
-                      l += 1
-                    }
-                  }
-                }
-                if (diag.allMsgs.isEmpty) output("╙──")
-                if (!allowTypeErrors && !mode.fixme && (
-                    !mode.expectTypeErrors && diag.isInstanceOf[TypeError]
-                  || !mode.expectWarnings && diag.isInstanceOf[Warning]
-                )) failures += globalLineNum
-                ()
-              }
-            }
-            
-            val raise: typer.Raise = d => report(d :: Nil)
-            
             val (diags, (typeDefs, stmts)) = p.desugared
             report(diags)
             
             if (mode.showParse) {
               typeDefs.foreach(td => output("Desugared: " + td))
-              stmts.foreach(s => output("Desugared: " + s))
+              stmts.foreach { s =>
+                output("Desugared: " + s)
+                output("AST: " + mlscript.codegen.Helpers.inspect(s))
+              }
             }
             
             val oldCtx = ctx
-            ctx = typer.processTypeDefs(typeDefs)(ctx, raise)
+            ctx = 
+              // if (newParser) typer.typeTypingUnit(tu)
+              // else 
+              typer.processTypeDefs(typeDefs)(ctx, raise)
             
             def getType(ty: typer.TypeScheme): Type = {
               val wty = ty.uninstantiatedBody
@@ -342,7 +478,7 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
                       val tvarVariance = tvv.getOrElse(tvar, throw new Exception(
                         s"Type variable $tvar not found in variance store ${ttd.tvarVariances} for $ttd"))
                       SourceCode(s"${tvarVariance.show}${tname.name}")
-                    }.toList).toString()
+                    })
                   else
                     SourceCode("")
                 output(s"Defined " + td.kind.str + " " + tn + params)
@@ -384,215 +520,212 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
             
             if (!varianceWarnings.isEmpty) {
               import Message._
-              val diags = varianceWarnings.map{ case (tname, biVars) =>
-                val warnings = biVars.map( tname => msg"${tname.name} is irrelevant and may be removed" -> tname.toLoc).toList
-                Warning(msg"Type definition ${tname.name} has bivariant type parameters:" -> tname.toLoc :: warnings)
+              val diags = varianceWarnings.iterator.map { case (tname, biVars) =>
+                val warnings = biVars.map( tname => msg"${tname.name} is irrelevant and may be removed" -> tname.toLoc)
+                WarningReport(msg"Type definition ${tname.name} has bivariant type parameters:" -> tname.toLoc :: warnings)
               }.toList
               report(diags)
-            }
-
-            final case class ExecutedResult(var replies: Ls[ReplHost.Reply]) extends JSTestBackend.Result {
-              def showFirst(prefixLength: Int): Unit = replies match {
-                case ReplHost.Error(err) :: rest =>
-                  if (!(mode.expectTypeErrors
-                      || mode.expectRuntimeErrors
-                      || allowRuntimeErrors
-                      || mode.fixme
-                  )) failures += blockLineNum
-                  totalRuntimeErrors += 1
-                  output("Runtime error:")
-                  err.split('\n') foreach { s => output("  " + s) }
-                  replies = rest
-                case ReplHost.Unexecuted(reason) :: rest =>
-                  output(" " * prefixLength + "= <no result>")
-                  output(" " * (prefixLength + 2) + reason)
-                  replies = rest
-                case ReplHost.Result(result) :: rest =>
-                  result.split('\n').zipWithIndex foreach { case (s, i) =>
-                    if (i =:= 0) output(" " * prefixLength + "= " + s)
-                    else output(" " * (prefixLength + 2) + s)
-                  }
-                  replies = rest
-                case ReplHost.Empty :: rest =>
-                  output(" " * prefixLength + "= <missing implementation>")
-                  replies = rest
-                case Nil => ()
-              }
-            }
-            
-            var results: JSTestBackend.Result = if (!allowTypeErrors &&
-                file.ext =:= "mls" && !mode.noGeneration && !noJavaScript) {
-              backend(p, mode.allowEscape) match {
-                case TestCode(prelude, queries) => {
-                  // Display the generated code.
-                  if (mode.showGeneratedJS) {
-                    if (!prelude.isEmpty) {
-                      output("// Prelude")
-                      prelude foreach { line =>
-                        output(line)
-                      }
-                    }
-                    queries.zipWithIndex foreach {
-                      case (JSTestBackend.CodeQuery(prelude, code, _), i) =>
-                        output(s"// Query ${i + 1}")
-                        prelude foreach { output(_) }
-                        code foreach { output(_) }
-                      case (JSTestBackend.AbortedQuery(reason), i) =>
-                        output(s"// Query ${i + 1} aborted: $reason")
-                      case (JSTestBackend.EmptyQuery, i) =>
-                        output(s"// Query ${i + 1} is empty")
-                    }
-                    output("// End of generated code")
-                  }
-                  // Execute code.
-                  if (!mode.noExecution) {
-                    prelude match {
-                      case Nil => ()
-                      case lines => host.execute(lines mkString " ")
-                    }
-                    if (mode.showRepl) {
-                      println(s"Block [line: ${blockLineNum}] [file: ${file.baseName}]")
-                      if (queries.isEmpty)
-                        println(s"The block is empty")
-                    }
-                    // Send queries to the host.
-                    ExecutedResult(queries.zipWithIndex.map {
-                      case (JSTestBackend.CodeQuery(preludeLines, codeLines, res), i) =>
-                        val prelude = preludeLines.mkString
-                        val code = codeLines.mkString
-                        if (mode.showRepl) {
-                          println(s"├── Query ${i + 1}/${queries.length}")
-                          println(s"│ ├── Prelude: ${if (preludeLines.isEmpty) "<empty>" else prelude}")
-                          println(s"│ └── Code: ${code}")
-                        }
-                        val reply = host.query(prelude, code, res)
-                        if (mode.showRepl) {
-                          val prefix = if (i + 1 == queries.length) "└──" else "├──"
-                          println(s"$prefix Reply ${i + 1}/${queries.length}: $reply")
-                        }
-                        reply
-                      case (JSTestBackend.AbortedQuery(reason), i) =>
-                        if (mode.showRepl) {
-                          val prefix = if (i + 1 == queries.length) "└──" else "├──"
-                          println(s"$prefix Query ${i + 1}/${queries.length}: <aborted: $reason>")
-                        }
-                        ReplHost.Unexecuted(reason)
-                      case (JSTestBackend.EmptyQuery, i) =>
-                        if (mode.showRepl) {
-                          val prefix = if (i + 1 == queries.length) "└──" else "├──"
-                          println(s"$prefix Query ${i + 1}/${queries.length}: <empty>")
-                        }
-                        ReplHost.Empty
-                    })
-                  } else {
-                    JSTestBackend.ResultNotExecuted
-                  }
-                }
-                case t => t
-              }
-            } else {
-              JSTestBackend.ResultNotExecuted
-            }
-
-            def showFirstResult(prefixLength: Int) = results match {
-              case t: ExecutedResult => t.showFirst(prefixLength)
-              case _ => ()
             }
             
             // process statements and output mlscript types
             // all `Def`s and `Term`s are processed here
             // generate typescript types if generateTsDeclarations flag is
             // set in the mode
-            stmts.foreach {
-              // statement only declares a new term with its type
-              // but does not give a body/definition to it
-              case Def(isrec, nme, R(PolyType(tps, rhs))) =>
-                typer.dbg = mode.dbg
-                val ty_sch = typer.PolymorphicType(0,
-                  typer.typeType(rhs)(ctx.nextLevel, raise,
-                    vars = tps.map(tp => tp.name -> typer.freshVar(typer.noProv/*FIXME*/)(1)).toMap))
-                ctx += nme.name -> ty_sch
-                declared += nme.name -> ty_sch
-                val exp = getType(ty_sch)
-                output(s"$nme: ${exp.show}")
-                showFirstResult(nme.name.length())
-                if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(exp, Some(nme.name))
+            // The tuple type means: (<stmt name>, <type>, <diagnosis>, <order>)
+            val typerResults: Ls[(Str, Ls[Str], Ls[Str], Bool)] = stmts.map { stmt =>
+              // Because diagnostic lines are after the typing results,
+              // we need to cache the diagnostic blocks and add them to the
+              // `typerResults` buffer after the statement has been processed.
+              val diagnosticLines = mutable.Buffer.empty[Str]
+              // We put diagnosis to the buffer in the following `Typer` routines.
+              val raiseToBuffer: typer.Raise = d => {
+                report(d :: Nil, diagnosticLines += _)
+              }
+              // Typing results are before diagnostic messages in the subsumption case.
+              // We use this flag to prevent too much changes in PR #150.
+              var typeBeforeDiags = false
+              val typingResults: Opt[(Str, Ls[Str])] = stmt match {
+                // statement only declares a new term with its type
+                // but does not give a body/definition to it
+                case Def(isrec, nme, R(PolyType(tps, rhs)), isByname) =>
+                  typer.dbg = mode.dbg
+                  val ty_sch = typer.PolymorphicType(0,
+                    typer.typeType(rhs)(ctx.nextLevel, raiseToBuffer,
+                      vars = tps.map(tp => tp.name -> typer.freshVar(typer.noProv/*FIXME*/)(1)).toMap))
+                  ctx += nme.name -> typer.VarSymbol(ty_sch, nme)
+                  declared += nme.name -> ty_sch
+                  val exp = getType(ty_sch)
+                  if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(exp, Some(nme.name))
+                  S(nme.name -> (s"$nme: ${exp.show}" :: Nil))
 
-              // statement is defined and has a body/definition
-              case d @ Def(isrec, nme, L(rhs)) =>
-                typer.dbg = mode.dbg
-                val ty_sch = typer.typeLetRhs(isrec, nme.name, rhs)(ctx, raise)
-                val exp = getType(ty_sch)
-                // statement does not have a declared type for the body
-                // the inferred type must be used and stored for lookup
-                declared.get(nme.name) match {
-                  // statement has a body but it's type was not declared
-                  // infer it's type and store it for lookup and type gen
-                  case N =>
-                    ctx += nme.name -> ty_sch
-                    output(s"$nme: ${exp.show}")
-                    if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(exp, Some(nme.name))
-                    
-                  // statement has a body and a declared type
-                  // both are used to compute a subsumption (What is this??)
-                  // the inferred type is used to for ts type gen
-                  case S(sign) =>
-                    ctx += nme.name -> sign
-                    val sign_exp = getType(sign)
-                    output(exp.show)
-                    output(s"  <:  $nme:")
-                    output(sign_exp.show)
-                    typer.dbg = mode.dbg
-                    typer.subsume(ty_sch, sign)(ctx, raise, typer.TypeProvenance(d.toLoc, "def definition"))
-                    if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(exp, Some(nme.name))
-                }
-                showFirstResult(nme.name.length())
-              case desug: DesugaredStatement =>
-                var prefixLength = 0
-                typer.dbg = mode.dbg
-                typer.typeStatement(desug, allowPure = true)(ctx, raise) match {
-                  // when does this happen??
-                  case R(binds) =>
-                    binds.foreach {
-                      case (nme, pty) =>
+                // statement is defined and has a body/definition
+                case d @ Def(isrec, nme, L(rhs), isByname) =>
+                  typer.dbg = mode.dbg
+                  val ty_sch = typer.typeLetRhs(isrec, nme.name, rhs)(ctx, raiseToBuffer)
+                  val exp = getType(ty_sch)
+                  // statement does not have a declared type for the body
+                  // the inferred type must be used and stored for lookup
+                  S(nme.name -> (declared.get(nme.name) match {
+                    // statement has a body but it's type was not declared
+                    // infer it's type and store it for lookup and type gen
+                    case N =>
+                      ctx += nme.name -> typer.VarSymbol(ty_sch, nme)
+                      if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(exp, Some(nme.name))
+                      s"$nme: ${exp.show}" :: Nil
+                      
+                    // statement has a body and a declared type
+                    // both are used to compute a subsumption (What is this??)
+                    // the inferred type is used to for ts type gen
+                    case S(sign) =>
+                      ctx += nme.name -> typer.VarSymbol(sign, nme)
+                      val sign_exp = getType(sign)
+                      typer.dbg = mode.dbg
+                      typer.subsume(ty_sch, sign)(ctx, raiseToBuffer, typer.TypeProvenance(d.toLoc, "def definition"))
+                      if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(exp, Some(nme.name))
+                      typeBeforeDiags = true
+                      exp.show :: s"  <:  $nme:" :: sign_exp.show :: Nil
+                  }))
+                case desug: DesugaredStatement =>
+                  typer.dbg = mode.dbg
+                  typer.typeStatement(desug, allowPure = true)(ctx, raiseToBuffer) match {
+                    case R(binds) =>
+                      binds.map { case nme -> pty =>
                         val ptType = getType(pty)
-                        ctx += nme -> pty
-                        output(s"$nme: ${ptType.show}")
-                        prefixLength = nme.length()
+                        ctx += nme -> typer.VarSymbol(pty, Var(nme))
                         if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(ptType, Some(nme))
-                    }
-
-                  // statements for terms that compute to a value
-                  // and are not bound to a variable name
-                  case L(pty) =>
-                    val exp = getType(pty)
-                    if (exp =/= TypeName("unit")) {
-                      ctx += "res" -> pty
-                      output(s"res: ${exp.show}")
-                      if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(exp, None)
-                      prefixLength = 3
-                    }
+                        nme -> (s"$nme: ${ptType.show}" :: Nil)
+                      }
+                    
+                    // statements for terms that compute to a value
+                    // and are not bound to a variable name
+                    case L(pty) =>
+                      val exp = getType(pty)
+                      S(if (exp =/= TypeName("unit")) {
+                        val res = "res"
+                        ctx += res -> typer.VarSymbol(pty, Var(res))
+                        if (mode.generateTsDeclarations) tsTypegenCodeBuilder.addTypeGenTermDefinition(exp, None)
+                        res -> (s"res: ${exp.show}" :: Nil)
+                      } else (
+                        "" -> Nil
+                      ))
                 }
-                showFirstResult(prefixLength)
+              }
+              typingResults match {
+                case N => ("", Nil, diagnosticLines.toList, false)
+                case S(name -> typingLines) =>
+                  (name, typingLines, diagnosticLines.toList, typeBeforeDiags)
+              }
+            }
+
+            import JSTestBackend._
+            
+            val executionResults: Result \/ Ls[ReplHost.Reply] = if (!allowTypeErrors &&
+                file.ext =:= "mls" && !mode.noGeneration && !noJavaScript) {
+              import codeGenTestHelpers._
+              backend(p, mode.allowEscape) match {
+                case testCode @ TestCode(prelude, queries) => {
+                  // Display the generated code.
+                  if (mode.showGeneratedJS) showGeneratedCode(testCode)
+                  // Execute code.
+                  if (!mode.noExecution) {
+                    val preludeReply = if (prelude.isEmpty) N else S(host.execute(prelude.mkString(" ")))
+                    if (mode.showRepl) showReplPrelude(prelude, preludeReply, blockLineNum)
+                    val replies = queries.map {
+                      case CodeQuery(preludeLines, codeLines, resultName) =>
+                        host.query(preludeLines.mkString, codeLines.mkString, resultName)
+                      case AbortedQuery(reason) => ReplHost.Unexecuted(reason)
+                      case EmptyQuery => ReplHost.Empty
+                    }
+                    if (mode.showRepl) showReplContent(queries, replies)
+                    R(replies)
+                  } else {
+                    L(ResultNotExecuted)
+                  }
+                }
+                case t => L(t)
+              }
+            } else {
+              L(ResultNotExecuted)
             }
 
             // If code generation fails, show the error message.
-            results match {
-              case IllFormedCode(message) =>
-                totalCodeGenErrors += 1
-                if (!mode.expectCodeGenErrors && !mode.fixme)
-                  failures += blockLineNum
-                output("Code generation encountered an error:")
-                output(s"  ${message}")
-              case Unimplemented(message) =>
-                output("Unable to execute the code:")
-                output(s"  ${message}")
-              case UnexpectedCrash(name, message) =>
-                if (!mode.fixme)
-                  failures += blockLineNum
-                output("Code generation crashed:")
-                output(s"  $name: $message")
-              case _ => ()
+            executionResults match {
+              case R(replies) =>
+                val replyQueue = mutable.Queue.from(replies)
+                typerResults.foreach { case (name, typingLines, diagnosticLines, typeBeforeDiags) =>
+                  if (typeBeforeDiags) {
+                    typingLines.foreach(output)
+                    diagnosticLines.foreach(output)
+                  } else {
+                    diagnosticLines.foreach(output)
+                    typingLines.foreach(output)
+                  }
+                  val prefixLength = name.length
+                  replyQueue.headOption.foreach { head =>
+                    head match {
+                      case ReplHost.Error(isSyntaxError, content) =>
+                        // We don't expect type errors nor FIXME.
+                        if (!mode.expectTypeErrors && !mode.fixme) {
+                          // We don't expect code generation errors and it is.
+                          if (!mode.expectCodeGenErrors && isSyntaxError)
+                            failures += blockLineNum
+                          // We don't expect runtime errors and it's a runtime error.
+                          if (!mode.expectRuntimeErrors && !allowRuntimeErrors && !isSyntaxError)
+                            failures += blockLineNum
+                        }
+                        if (isSyntaxError) {
+                          // If there is syntax error in the generated code,
+                          // it should be a code generation error.
+                          output("Syntax error:")
+                          totalCodeGenErrors += 1
+                        } else { // Otherwise, it is a runtime error.
+                          output("Runtime error:")
+                          totalRuntimeErrors += 1
+                        }
+                        content.linesIterator.foreach { s => output("  " + s) }
+                      case ReplHost.Unexecuted(reason) =>
+                        output(" " * prefixLength + "= <no result>")
+                        output(" " * (prefixLength + 2) + reason)
+                      case ReplHost.Result(result, _) =>
+                        result.linesIterator.zipWithIndex.foreach { case (line, i) =>
+                          if (i =:= 0) output(" " * prefixLength + "= " + line)
+                          else output(" " * (prefixLength + 2) + line)
+                        }
+                      case ReplHost.Empty =>
+                        output(" " * prefixLength + "= <missing implementation>")
+                    }
+                    replyQueue.dequeue()
+                  }
+                }
+              case L(other) =>
+                // Print type checking results first.
+                typerResults.foreach { case (_, typingLines, diagnosticLines, typeBeforeDiags) =>
+                  if (typeBeforeDiags) {
+                    typingLines.foreach(output)
+                    diagnosticLines.foreach(output)
+                  } else {
+                    diagnosticLines.foreach(output)
+                    typingLines.foreach(output)
+                  }
+                }
+                other match {
+                  case _: TestCode => () // Impossible case.
+                  case IllFormedCode(message) =>
+                    totalCodeGenErrors += 1
+                    if (!mode.expectCodeGenErrors && !mode.fixme)
+                      failures += blockLineNum
+                    output("Code generation encountered an error:")
+                    output(s"  ${message}")
+                  case Unimplemented(message) =>
+                    output("Unable to execute the code:")
+                    output(s"  ${message}")
+                  case UnexpectedCrash(name, message) =>
+                    if (!mode.fixme)
+                      failures += blockLineNum
+                    output("Code generation crashed:")
+                    output(s"  $name: $message")
+                  case ResultNotExecuted => ()
+                }
             }
             // generate typescript typegen block
             if (mode.generateTsDeclarations) outputSourceCode(tsTypegenCodeBuilder.toSourceCode())
@@ -605,6 +738,8 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
               // output(s"constructed types: " + ty)
             }
             
+            if (mode.expectParseErrors && totalParseErrors =:= 0)
+              failures += blockLineNum
             if (mode.expectTypeErrors && totalTypeErrors =:= 0)
               failures += blockLineNum
             if (mode.expectWarnings && totalWarnings =:= 0)
@@ -614,6 +749,7 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
             if (mode.expectRuntimeErrors && totalRuntimeErrors =:= 0)
               failures += blockLineNum
         } catch {
+          case oh_noes: ThreadDeath => throw oh_noes
           case err: Throwable =>
             if (!mode.fixme)
               failures += allLines.size - lines.size
@@ -641,13 +777,18 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
     val endTime = System.nanoTime()
     val timeStr = (((endTime - beginTime) / 1000 / 100).toDouble / 10.0).toString
     val testColor = if (testFailed) Console.RED else Console.GREEN
-    buf ++= s"${" " * (30 - fileName.size)}${testColor}${
+    
+    val resStr = s"${" " * (35 - testStr.size)}${testColor}${
       " " * (6 - timeStr.size)}$timeStr  ms${Console.RESET}"
+    
+    if (inParallel) println(s"${Console.CYAN}Processed${Console.RESET}  $testStr$resStr")
+    else println(resStr)
+    
     if (result =/= fileContents) {
-      buf ++= s"\n! Updated $file"
+      println(s"! Updated $file")
       os.write.over(file, result)
     }
-    println(buf.mkString)
+    
     if (testFailed)
       if (unmergedChanges.nonEmpty)
         fail(s"Unmerged non-output changes around: " + unmergedChanges.map("l."+_).mkString(", "))
@@ -658,20 +799,25 @@ class DiffTests extends org.scalatest.funsuite.AnyFunSuite with org.scalatest.Pa
 
 object DiffTests {
   
-  private val dir = os.pwd/"shared"/"src"/"test"/"diff"
+  private val TimeLimit =
+    if (sys.env.get("CI").isDefined) Span(25, Seconds)
+    else Span(10, Seconds)
+  
+  private val pwd = os.pwd
+  private val dir = pwd/"shared"/"src"/"test"/"diff"
   
   private val allFiles = os.walk(dir).filter(_.toIO.isFile)
   
   private val validExt = Set("fun", "mls")
   
   // Aggregate unstaged modified files to only run the tests on them, if there are any
-  private val modified: Set[Str] =
+  private val modified: Set[os.RelPath] =
     try os.proc("git", "status", "--porcelain", dir).call().out.lines().iterator.flatMap { gitStr =>
       println(" [git] " + gitStr)
       val prefix = gitStr.take(2)
-      val filePath = gitStr.drop(3)
-      val fileName = os.RelPath(filePath).baseName
-      if (prefix =:= "A " || prefix =:= "M ") N else S(fileName) // disregard modified files that are staged
+      val filePath = os.RelPath(gitStr.drop(3))
+      if (prefix =:= "A " || prefix =:= "M " || prefix =:= "R " || prefix =:= "D ") N // disregard modified files that are staged
+      else S(filePath)
     }.toSet catch {
       case err: Throwable => System.err.println("/!\\ git command failed with: " + err)
       Set.empty
@@ -679,6 +825,7 @@ object DiffTests {
   
   // Allow overriding which specific tests to run, sometimes easier for development:
   private val focused = Set[Str](
+    // "LetRec"
     // "Ascribe",
     // "Repro",
     // "RecursiveTypes",
@@ -697,115 +844,12 @@ object DiffTests {
     // "TraitMatching",
     // "Subsume",
     // "Methods",
-  )
-  private def filter(name: Str): Bool =
-    if (focused.nonEmpty) focused(name) else modified.isEmpty || modified(name)
-  
-  private val files = allFiles.filter { file =>
-      val fileName = file.baseName
-      validExt(file.ext) && filter(fileName)
-  }
-  
-  
-  /** Helper to run NodeJS on test input. */
-  final case class ReplHost() {
-    import java.io.{BufferedWriter, BufferedReader, InputStreamReader, OutputStreamWriter}
-    private val builder = new java.lang.ProcessBuilder()
-    builder.command("node", "--interactive")
-    private val proc = builder.start()
-
-    private val stdin = new BufferedWriter(new OutputStreamWriter(proc.getOutputStream))
-    private val stdout = new BufferedReader(new InputStreamReader(proc.getInputStream))
-    private val stderr = new BufferedReader(new InputStreamReader(proc.getErrorStream))
-
-    skipUntilPrompt()
-
-    private def skipUntilPrompt(): Unit = {
-      val buffer = new StringBuilder()
-      while (!buffer.endsWith("\n> ")) {
-        buffer.append(stdout.read().toChar)
-      }
-      buffer.delete(buffer.length - 3, buffer.length)
-      ()
-    }
-
-    private def consumeUntilPrompt(): ReplHost.Reply = {
-      val buffer = new StringBuilder()
-      while (!buffer.endsWith("\n> ")) {
-        buffer.append(stdout.read().toChar)
-      }
-      buffer.delete(buffer.length - 3, buffer.length)
-      val reply = buffer.toString()
-      val begin = reply.indexOf(0x200B)
-      val end = reply.lastIndexOf(0x200B)
-      if (begin >= 0 && end >= 0)
-        // `console.log` inserts a space between every two arguments,
-        // so + 1 and - 1 is necessary to get correct length.
-        ReplHost.Error(reply.substring(begin + 1, end))
-      else
-        ReplHost.Result(reply)
-    }
-
-    private def send(code: Str, useEval: Bool = false): Unit = {
-      stdin.write(
-        if (useEval) "eval(" + JSLit.makeStringLiteral(code) + ")\n"
-        else if (code endsWith "\n") code
-        else code + "\n"
-      )
-      stdin.flush()
-    }
-
-    def query(prelude: Str, code: Str, res: Str): ReplHost.Reply = {
-      if (prelude.isEmpty && code.isEmpty) ReplHost.Empty
-      else {
-        val wrapped = s"$prelude try { $code } catch (e) { console.log('\\u200B' + e + '\\u200B'); }"
-        send(wrapped)
-        consumeUntilPrompt() match {
-          case _: ReplHost.Result =>
-            send(if (res =:= "res") res else s"globalThis[\"${res}\"]")
-            consumeUntilPrompt()
-          case t => t
-        }
-      }
-    }
-
-    def execute(code: Str): Unit = {
-      send(code)
-      skipUntilPrompt()
-    }
-
-    def terminate(): Unit = proc.destroy()
-  }
-
-  object ReplHost {
-    /**
-      * The base class of all kinds of REPL replies.
-      */
-    sealed abstract class Reply
-
-    final case class Result(content: Str) extends Reply {
-      override def toString(): Str = s"[success] $content"
-    }
-
-    /**
-      * If the query is `Empty`, we will receive this.
-      */
-    final object Empty extends Reply {
-      override def toString(): Str = "[empty]"
-    }
-
-    /**
-      * If the query is `Unexecuted`, we will receive this.
-      */
-    final case class Unexecuted(message: Str) extends Reply {
-      override def toString(): Str = s"[unexecuted] $message"
-    }
-
-    /**
-      * If the `ReplHost` captured errors, it will response with `Error`.
-      */
-    final case class Error(message: Str) extends Reply {
-      override def toString(): Str = s"[error] $message"
-    }
+  ).map(os.RelPath(_))
+  // private def filter(name: Str): Bool =
+  def filter(file: os.RelPath): Bool = {
+    if (focused.nonEmpty) focused(file) else modified(file) || modified.isEmpty &&
+      true
+      // name.startsWith("new/")
+      // file.segments.toList.init.lastOption.contains("parser")
   }
 }

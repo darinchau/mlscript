@@ -9,7 +9,7 @@
 //│    = 42
 
 :js
-def foo = "oops"
+foo = "oops"
 //│ // Query 1
 //│ globalThis.foo = "oops";
 //│ // End of generated code

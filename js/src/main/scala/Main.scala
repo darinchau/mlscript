@@ -30,7 +30,7 @@ object Main {
     val tryRes = Try[Str] {
       import fastparse._
       import fastparse.Parsed.{Success, Failure}
-      import mlscript.{MLParser, TypeError, Origin}
+      import mlscript.{MLParser, ErrorReport, Origin}
       val lines = str.splitSane('\n').toIndexedSeq
       val processedBlock = MLParser.addTopLevelSeparators(lines).mkString
       val fph = new mlscript.FastParseHelpers(str, lines)
@@ -76,7 +76,7 @@ object Main {
               typeCheckResult.zip(pgrm.desugared._2._2) foreach { case ((name, ty), origin) =>
                 val value = origin match {
                   // Do not extract from results if its a type declaration.
-                  case Def(_, _, R(_)) => N
+                  case Def(_, _, R(_), _) => N
                   // Otherwise, `origin` is either a term or a definition.
                   case _ => results match {
                     case head :: next =>
@@ -177,14 +177,14 @@ object Main {
     val stopAtFirstError = true
     var errorOccurred = false
 
-    def formatError(culprit: Str, err: TypeError): Str = {
+    def formatError(culprit: Str, err: ErrorReport): Str = {
       s"""<b><font color="Red">
                 Error in <font color="LightGreen">${culprit}</font>: ${err.mainMsg}
                 <!--${
                   // The rest of the message may not make sense if we don't also print the provs
                   // For example we'd get things like "Declared at\nDeclared at" for dup type params...
                   err.allMsgs.tail
-                    .map(_._1.show.toString + "<br/>")
+                    .map(_._1.show + "<br/>")
                     .mkString("&nbsp;&nbsp;&nbsp;&nbsp;")}-->
                 </font></b><br/>"""
     }
@@ -193,7 +193,7 @@ object Main {
     implicit var ctx: Ctx =
       try processTypeDefs(typeDefs)(Ctx.init, raise)
       catch {
-        case err: TypeError =>
+        case err: ErrorReport =>
           res ++= formatError("class definitions", err)
           Ctx.init
       }
@@ -207,7 +207,7 @@ object Main {
         def debugOutput(msg: => Str): Unit = println(msg)
       }
       val sim = SimplifyPipeline(wty)(ctx)
-      val exp = typer.expandType(sim, true)
+      val exp = typer.expandType(sim)
       exp
     }
     def formatBinding(nme: Str, ty: TypeScheme): Str = {
@@ -238,10 +238,10 @@ object Main {
       }
       val sctx = Message.mkCtx(diag.allMsgs.iterator.map(_._1), "?")
       val headStr = diag match {
-        case TypeError(msg, loco) =>
+        case ErrorReport(msg, loco, src) =>
           totalTypeErrors += 1
           s"╔══ <strong style=\"color: #E74C3C\">[ERROR]</strong> "
-        case Warning(msg, loco) =>
+        case WarningReport(msg, loco, src) =>
           totalWarnings += 1
           s"╔══ <strong style=\"color: #F39C12\">[WARNING]</strong> "
       }
@@ -292,12 +292,15 @@ object Main {
     
     var declared: Map[Var, typer.PolymorphicType] = Map.empty
     
+    def htmlize(str: Str): Str =
+      str.replace("\n", "<br/>").replace("  ", "&emsp;")
+    
     var decls = stmts
     while (decls.nonEmpty) {
       val d = decls.head
       decls = decls.tail
       try d match {
-        case d @ Def(isrec, nme, L(rhs)) =>
+        case d @ Def(isrec, nme, L(rhs), _) =>
           val ty_sch = typeLetRhs(isrec, nme.name, rhs)(ctx, raise)
           val inst = ty_sch.instantiate(0)
           println(s"Typed `$nme` as: $inst")
@@ -308,11 +311,11 @@ object Main {
               subsume(ty_sch, sign)(ctx, raise, TypeProvenance(d.toLoc, "def definition"))
               // Note: keeping the less precise declared type signature here (no ctx update)
             case N =>
-              ctx += nme.name -> ty_sch
+              ctx += nme.name -> VarSymbol(ty_sch, nme)
           }
           res ++= formatBinding(d.nme.name, ty_sch)
-          results append S(d.nme.name) -> (getType(ty_sch).show)
-        case d @ Def(isrec, nme, R(PolyType(tps, rhs))) =>
+          results append S(d.nme.name) -> htmlize(getType(ty_sch).show)
+        case d @ Def(isrec, nme, R(PolyType(tps, rhs)), _) =>
           declared.get(nme) match {
             case S(sign) =>
               import Message.MessageContext
@@ -324,31 +327,31 @@ object Main {
           }
           val ty_sch = PolymorphicType(0, typeType(rhs)(ctx.nextLevel, raise,
             vars = tps.map(tp => tp.name -> freshVar(noProv/*FIXME*/)(1)).toMap))
-          ctx += nme.name -> ty_sch
+          ctx += nme.name -> VarSymbol(ty_sch, nme)
           declared += nme -> ty_sch
-          results append S(d.nme.name) -> getType(ty_sch).show
+          results append S(d.nme.name) -> htmlize(getType(ty_sch).show)
         case s: DesugaredStatement =>
           typer.typeStatement(s, allowPure = true) match {
             case R(binds) =>
               binds.foreach { case (nme, pty) =>
-                ctx += nme -> pty
+                ctx += nme -> VarSymbol(pty, Var(nme))
                 res ++= formatBinding(nme, pty)
-                results append S(nme) -> getType(pty).show
+                results append S(nme) -> htmlize(getType(pty).show)
               }
             case L(pty) =>
               val exp = getType(pty)
               if (exp =/= TypeName("unit")) {
                 val nme = "res"
-                ctx += nme -> pty
+                ctx += nme -> VarSymbol(pty, Var(nme))
                 res ++= formatBinding(nme, pty)
-                results append N -> getType(pty).show
+                results append N -> htmlize(getType(pty).show)
               }
           }
       } catch {
-        case err: TypeError =>
+        case err: ErrorReport =>
           if (stopAtFirstError) decls = Nil
           val culprit = d match {
-            case Def(isrec, nme, rhs)  => "def " + nme
+            case Def(isrec, nme, rhs, isByname)  => "def " + nme
             case _: DesugaredStatement => "statement"
           }
           res ++= report(err)

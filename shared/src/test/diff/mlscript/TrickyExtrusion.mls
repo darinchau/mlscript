@@ -1,7 +1,7 @@
 
 // From SuperType tests
 
-def True = true
+True = true
 //│ True: true
 //│     = true
 

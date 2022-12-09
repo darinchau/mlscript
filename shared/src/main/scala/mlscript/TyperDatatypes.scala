@@ -21,16 +21,18 @@ abstract class TyperDatatypes extends TyperHelpers { self: Typer =>
     override def toString: Str = (if (isOrigin) "o: " else "") + "‹"+loco.fold(desc)(desc+":"+_)+"›"
   }
   type TP = TypeProvenance
-
+  
   sealed abstract class TypeInfo
 
   /** A type for abstract classes that is used to check and throw
    * errors if the abstract class is being instantiated */
   case class AbstractConstructor(absMths: Set[Var], isTraitWithMethods: Bool) extends TypeInfo
   
+  case class VarSymbol(ty: TypeScheme, definingVar: Var) extends TypeInfo
+  
   /** A type that potentially contains universally quantified type variables,
     * and which can be isntantiated to a given level. */
-  sealed abstract class TypeScheme extends TypeInfo {
+  sealed abstract class TypeScheme {
     def uninstantiatedBody: SimpleType
     def instantiate(implicit lvl: Int): SimpleType
   }
@@ -151,6 +153,18 @@ abstract class TyperDatatypes extends TyperHelpers { self: Typer =>
       s"(${fields.map(f => s"${f._1.fold("")(_.name+": ")}${f._2},").mkString(" ")})"
     // override def toString = s"(${fields.map(f => s"${f._1.fold("")(_+": ")}${f._2},").mkString(" ")})"
   }
+
+  case class SpliceType(elems: Ls[Either[SimpleType, FieldType]])(val prov: TypeProvenance) extends ArrayBase {
+    lazy val level: Int = elems.map{ case L(l) => l.level case R(r) => r.level }.max
+    lazy val inner: FieldType = elems.map {
+      case L(l) => l match { case a: ArrayBase => a.inner case _ => ??? }
+      case R(r) => r
+    }.reduceLeft(_ || _)
+
+    def updateElems(f: SimpleType => SimpleType, g: SimpleType => SimpleType, 
+      h: SimpleType => SimpleType,newProv: TypeProvenance = prov): SpliceType =
+      SpliceType(elems.map{case L(l) => L(f(l)) case R(r) => R(r.update(g, h))})(newProv)
+  }
   
   /** Polarity `pol` being `true` means Bot; `false` means Top. These are extrema of the subtyping lattice. */
   case class ExtrType(pol: Bool)(val prov: TypeProvenance) extends SimpleType {
@@ -218,10 +232,11 @@ abstract class TyperDatatypes extends TyperHelpers { self: Typer =>
             tparamField(defn, tp) -> FieldType(
               Some(if (tvv(tv).isCovariant) BotType else tv),
               if (tvv(tv).isContravariant) TopType else tv)(prov)
-          }.toList)(noProv)
+          })(noProv)
         else TopType
       subst(td.kind match {
         case Als => td.bodyTy
+        case Nms => throw new NotImplementedError("Namespaces are not supported yet.")
         case Cls => clsNameToNomTag(td)(prov, ctx) & td.bodyTy & tparamTags
         case Trt => trtNameToNomTag(td)(prov, ctx) & td.bodyTy & tparamTags
       }, td.targs.lazyZip(targs).toMap) //.withProv(prov)
@@ -229,7 +244,7 @@ abstract class TyperDatatypes extends TyperHelpers { self: Typer =>
     private var tag: Opt[Opt[ClassTag]] = N
     def mkTag(implicit ctx: Ctx): Opt[ClassTag] = tag.getOrElse {
       val res = ctx.tyDefs.get(defn.name) match {
-        case S(td @ TypeDef(Cls, _, _, _, _, _, _, _, _)) => S(clsNameToNomTag(td)(noProv, ctx))
+        case S(td: TypeDef) if td.kind is Cls => S(clsNameToNomTag(td)(noProv, ctx))
         case _ => N
       }
       tag = S(res)
@@ -274,7 +289,7 @@ abstract class TyperDatatypes extends TyperHelpers { self: Typer =>
       // else this.parentsST.union(that.parentsST)
       else Set(this, that)
     def level: Int = 0
-    override def toString = showProvOver(false)(id.idStr+s"<${parents.mkString(",")}>")
+    override def toString = showProvOver(false)(id.idStr+s"<${parents.map(_.show).mkString(",")}>")
   }
   
   case class TraitTag(id: SimpleTerm)(val prov: TypeProvenance) extends BaseTypeOrTag with ObjectTag with Factorizable {
@@ -290,11 +305,14 @@ abstract class TyperDatatypes extends TyperHelpers { self: Typer =>
     override def toString = s"$lb..$ub"
   }
   object TypeBounds {
+    final def mkSimple(lb: SimpleType, ub: SimpleType, prov: TypeProvenance = noProv): SimpleType = (lb, ub) match {
+      case (TypeBounds(lb, _), ub) => mkSimple(lb, ub, prov)
+      case (lb, TypeBounds(_, ub)) => mkSimple(lb, ub, prov)
+      case _ => TypeBounds(lb, ub)(prov)
+    }
     final def mk(lb: SimpleType, ub: SimpleType, prov: TypeProvenance = noProv)(implicit ctx: Ctx): SimpleType =
       if ((lb is ub) || lb === ub || lb <:< ub && ub <:< lb) lb else (lb, ub) match {
-        case (TypeBounds(lb, _), ub) => mk(lb, ub, prov)
-        case (lb, TypeBounds(_, ub)) => mk(lb, ub, prov)
-        case _ => TypeBounds(lb, ub)(prov)
+        case _ => mkSimple(lb, ub, prov)
       }
   }
   

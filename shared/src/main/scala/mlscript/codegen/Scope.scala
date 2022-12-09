@@ -4,7 +4,7 @@ import mlscript.utils.shorthands._
 import mlscript.{JSStmt, JSExpr, JSLetDecl}
 import mlscript.Type
 import scala.reflect.ClassTag
-import mlscript.{TypeName, Top, Bot, TypeDef, Als, Trt, Cls}
+import mlscript.{TypeName, Top, Bot, TypeDef, Als, Trt, Cls, Nms}
 import mlscript.MethodDef
 import mlscript.Term
 import mlscript.utils.{AnyOps, lastWords}
@@ -28,6 +28,7 @@ class Scope(name: Str, enclosing: Opt[Scope]) {
       "true",
       "false",
       "id",
+      "emptyArray",
       "succ",
       "error",
       "concat",
@@ -125,6 +126,10 @@ class Scope(name: Str, enclosing: Opt[Scope]) {
     ()
   }
 
+  def unregisterSymbol(symbol: ValueSymbol): Unit = {
+    unregister(symbol)
+  }
+
   def getType(name: Str): Opt[TypeSymbol] = lexicalTypeSymbols.get(name)
 
   /**
@@ -167,7 +172,7 @@ class Scope(name: Str, enclosing: Opt[Scope]) {
           throw new CodeGenError(s"undeclared type name $name when resolving base classes")
       }
     }
-    if (baseClasses.length > 1)
+    if (baseClasses.lengthIs > 1)
       throw CodeGenError(
         s"cannot have ${baseClasses.length} base classes: " +
         baseClasses.map { _.lexicalName }.mkString(", ")
@@ -190,12 +195,14 @@ class Scope(name: Str, enclosing: Opt[Scope]) {
   }
 
   def declareTypeSymbol(typeDef: TypeDef): TypeSymbol = typeDef match {
-    case TypeDef(Als, TypeName(name), tparams, body, _, _) =>
+    case TypeDef(Als, TypeName(name), tparams, body, _, _, _) =>
       declareTypeAlias(name, tparams map { _.name }, body)
-    case TypeDef(Trt, TypeName(name), tparams, body, _, mthdDefs) =>
+    case TypeDef(Trt, TypeName(name), tparams, body, _, mthdDefs, _) =>
       declareTrait(name, tparams map { _.name }, body, mthdDefs)
-    case TypeDef(Cls, TypeName(name), tparams, baseType, _, members) =>
+    case TypeDef(Cls, TypeName(name), tparams, baseType, _, members, _) =>
       declareClass(name, tparams map { _.name }, baseType, members)
+    case TypeDef(Nms, _, _, _, _, _, _) =>
+      throw CodeGenError("Namespaces are not supported yet.")
   }
 
   def declareClass(
@@ -227,8 +234,15 @@ class Scope(name: Str, enclosing: Opt[Scope]) {
     register(symbol)
     symbol
   }
+  
+  def declareThisAlias(): ValueSymbol = {
+    val runtimeName = allocateRuntimeName("self")
+    val symbol = ValueSymbol("this", runtimeName, Some(false), false)
+    register(symbol)
+    symbol
+  }
 
-  def declareValue(lexicalName: Str): ValueSymbol = {
+  def declareValue(lexicalName: Str, isByvalueRec: Option[Boolean], isLam: Boolean): ValueSymbol = {
     val runtimeName = lexicalValueSymbols.get(lexicalName) match {
       // If we are implementing a stub symbol and the stub symbol did not shadow any other
       // symbols, it is safe to reuse its `runtimeName`.
@@ -236,7 +250,7 @@ class Scope(name: Str, enclosing: Opt[Scope]) {
       case S(sym: BuiltinSymbol) if !sym.accessed    => sym.runtimeName
       case _                                         => allocateRuntimeName(lexicalName)
     }
-    val symbol = ValueSymbol(lexicalName, runtimeName)
+    val symbol = ValueSymbol(lexicalName, runtimeName, isByvalueRec, isLam)
     register(symbol)
     symbol
   }
@@ -282,12 +296,21 @@ class Scope(name: Str, enclosing: Opt[Scope]) {
     name
   }
 
+  /**
+    * This function declares a parameter in current scope and returns the 
+    * symbol's runtime name.
+    *
+    * @param name
+    * @return
+    */
   def declareParameter(name: Str): Str = {
-    val prefix = if (JSField.isValidIdentifier(name)) name
-      else if (Symbol.isKeyword(name)) name + "$" else Scope.replaceTicks(name)
-    val symbol = ValueSymbol(name, prefix)
-    register(symbol)
-    symbol.runtimeName
+    val prefix =
+      if (JSField.isValidIdentifier(name)) name
+      else if (Symbol.isKeyword(name)) name + "$"
+      else Scope.replaceTicks(name)
+    val runtimeName = allocateRuntimeName(prefix)
+    register(ValueSymbol(name, runtimeName, Some(false), false))
+    runtimeName
   }
 
   def existsRuntimeSymbol(name: Str): Bool = runtimeSymbols.contains(name)
@@ -299,7 +322,7 @@ class Scope(name: Str, enclosing: Opt[Scope]) {
 
   
   def refreshRes(): Unit = {
-    lexicalValueSymbols("res") = ValueSymbol("res", "res")
+    lexicalValueSymbols("res") = ValueSymbol("res", "res", Some(false), false)
   }
 }
 

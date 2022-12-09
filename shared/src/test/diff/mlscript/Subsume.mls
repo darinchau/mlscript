@@ -12,16 +12,16 @@ def f x = x
 //│  = [Function: f]
 
 :e
-def f = 42
+f = 42
 //│ 42
 //│   <:  f:
 //│ int -> int
 //│ ╔══[ERROR] Type mismatch in def definition:
-//│ ║  l.15: 	def f = 42
-//│ ║        	^^^^^^^^^^
+//│ ║  l.15: 	f = 42
+//│ ║        	^^^^^^
 //│ ╟── integer literal of type `42` is not a function
-//│ ║  l.15: 	def f = 42
-//│ ║        	        ^^
+//│ ║  l.15: 	f = 42
+//│ ║        	    ^^
 //│ ╟── Note: constraint arises from function type:
 //│ ║  l.3: 	def f: int -> int
 //│ ╙──     	       ^^^^^^^^^^
@@ -43,7 +43,7 @@ def boom: anything
 //│ boom: anything
 //│     = <missing implementation>
 
-def boom = 1
+boom = 1
 //│ 1
 //│   <:  boom:
 //│ anything
@@ -82,7 +82,7 @@ def boom = 1
 //│ ╟── Note: constraint arises from type reference:
 //│ ║  l.67: 	def boom: nothing
 //│ ╙──      	          ^^^^^^^
-//│     = 1
+//│     = [Function: boom1]
 
 
 def boom: 'a
@@ -90,16 +90,16 @@ def boom: 'a
 //│     = <missing implementation>
 
 :e
-def boom = 1
+boom = 1
 //│ 1
 //│   <:  boom:
 //│ nothing
 //│ ╔══[ERROR] Type mismatch in def definition:
-//│ ║  l.93: 	def boom = 1
-//│ ║        	^^^^^^^^^^^^
+//│ ║  l.93: 	boom = 1
+//│ ║        	^^^^^^^^
 //│ ╟── integer literal of type `1` is not an instance of type `'a`
-//│ ║  l.93: 	def boom = 1
-//│ ║        	           ^
+//│ ║  l.93: 	boom = 1
+//│ ║        	       ^
 //│ ╟── Note: constraint arises from type variable:
 //│ ║  l.88: 	def boom: 'a
 //│ ╙──      	          ^^
@@ -214,7 +214,7 @@ def f = impl
 //│ ╟── from reference:
 //│ ║  l.196: 	def impl a = a a
 //│ ╙──       	             ^
-//│  = [Function: impl]
+//│  = [Function: f2]
 
 :re
 f 1 
@@ -363,7 +363,7 @@ def self2 = self1
 //│ 'a
 //│   where
 //│     'a := 'a -> 'b
-//│      = [Function: res]
+//│      = [Function: self2]
 
 
 fun p -> fun q -> p q p

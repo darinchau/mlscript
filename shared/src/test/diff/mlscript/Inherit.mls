@@ -5,7 +5,7 @@ class Parent: { name: string }
 class Child: Parent & { age: int }
 //│ Defined class Child
 
-def p = Parent{ name = "Bob" }
+p = Parent{ name = "Bob" }
 //│ p: Parent & {name: "Bob"}
 //│  = Parent { name: 'Bob' }
 
@@ -14,17 +14,17 @@ p: Parent
 //│    = Parent { name: 'Bob' }
 
 :e
-def c = Child(Parent { name = "Bob" })
+c = Child(Parent { name = "Bob" })
 //│ ╔══[ERROR] Type mismatch in application:
-//│ ║  l.17: 	def c = Child(Parent { name = "Bob" })
-//│ ║        	        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//│ ║  l.17: 	c = Child(Parent { name = "Bob" })
+//│ ║        	    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 //│ ╟── application of type `Parent & {name: ?name}` is not a record (expected a record with fields: name, age)
-//│ ║  l.17: 	def c = Child(Parent { name = "Bob" })
-//│ ╙──      	              ^^^^^^^^^^^^^^^^^^^^^^^
+//│ ║  l.17: 	c = Child(Parent { name = "Bob" })
+//│ ╙──      	          ^^^^^^^^^^^^^^^^^^^^^^^
 //│ c: Child & {age: nothing, name: "Bob"} | error
 //│  = Child { name: 'Bob', age: undefined }
 
-def c = Child(Parent { name = "Bob" } with { age = 123 })
+c = Child(Parent { name = "Bob" } with { age = 123 })
 //│ c: Child & {age: 123, name: "Bob"}
 //│  = Child { name: 'Bob', age: 123 }
 

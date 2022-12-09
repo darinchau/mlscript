@@ -6,11 +6,11 @@ class None: {}
 
 
 def flatMap3 = fun f -> fun opt -> case opt of { Some -> f opt | _ -> opt }
-//│ flatMap3: ('a -> 'b) -> (Some[?] & 'a | 'b & ~some) -> 'b
+//│ flatMap3: ('a -> 'b) -> (Some[?] & 'a | 'b & ~#Some) -> 'b
 //│         = [Function: flatMap3]
 
 
-def arg = if true then Some{value = 42} with {payload = 23} else None {}
+arg = if true then Some{value = 42} with {payload = 23} else None {}
 //│ arg: None | Some[42] & {payload: 23}
 //│    = Some { value: 42, payload: 23 }
 
@@ -19,12 +19,12 @@ def arg = if true then Some{value = 42} with {payload = 23} else None {}
 flatMap3 (fun x -> add x.value x.payload) arg
 //│ res: int | None
 //│    = 65
-//│ constrain calls  : 100
+//│ constrain calls  : 96
 //│ annoying  calls  : 23
-//│ subtyping calls  : 63
+//│ subtyping calls  : 565
 
 
-def arg = if true then Some{value = 42} else None {}
+arg = if true then Some{value = 42} else None {}
 //│ arg: None | Some[42]
 //│    = Some { value: 42 }
 
@@ -33,8 +33,8 @@ flatMap3 (fun x -> x.value) arg
 //│    = 42
 
 
-def foo = flatMap3 (fun x -> x.value)
-//│ foo: ((Some[?] with {value: 'a}) | 'a & ~some) -> 'a
+foo = flatMap3 (fun x -> x.value)
+//│ foo: ((Some[?] with {value: 'a}) | 'a & ~#Some) -> 'a
 //│    = [Function (anonymous)]
 
 foo arg
@@ -45,7 +45,7 @@ foo 1
 //│ res: 1
 //│    = 1
 
-def fn = foo None
+fn = foo None
 //│ fn: anything -> None
 //│   = [Function (anonymous)]
 
@@ -67,8 +67,8 @@ fun f -> flatMap3 f arg
 
 
 
-def foo = flatMap3 (fun x -> x)
-//│ foo: ('a & (Some[?] | ~some)) -> 'a
+foo = flatMap3 (fun x -> x)
+//│ foo: ('a & (Some[?] | ~#Some)) -> 'a
 //│    = [Function (anonymous)]
 
 foo 1

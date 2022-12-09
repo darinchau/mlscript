@@ -58,7 +58,7 @@ class SourceCode(val lines: Ls[SourceLine]) {
     */
   def ++(that: SourceCode): SourceCode = that.lines match {
     case head :: next =>
-      if (lines.length > 0) {
+      if (lines.nonEmpty) {
         new SourceCode(lines.init ::: Ls(lines.last + head) ::: next)
       } else {
         that
@@ -66,9 +66,9 @@ class SourceCode(val lines: Ls[SourceLine]) {
     case Nil => this
   }
 
-  def isSingleLine: Bool = lines.length === 1
+  def isSingleLine: Bool = lines.sizeCompare(1) === 0
 
-  def isMultipleLine: Bool = lines.length > 1
+  def isMultipleLine: Bool = lines.lengthIs > 1
 
   def isEmpty: Bool = lines.isEmpty
   def indented: SourceCode = new SourceCode(lines map { _.indented })
@@ -440,13 +440,20 @@ final case class JSImmEvalFn(
     arguments: Ls[JSExpr]
 ) extends JSExpr {
   implicit def precedence: Int = 22
-  def toSourceCode: SourceCode = {
-    val fnName = name.getOrElse("")
-    (SourceCode(s"function $fnName${JSExpr.params(params)} ") ++ (body match {
-      case Left(expr) => expr.`return`.toSourceCode
-      case Right(stmts) =>
-        stmts.foldLeft(SourceCode.empty) { _ + _.toSourceCode }
-    }).block).parenthesized ++ JSExpr.arguments(arguments)
+  def toSourceCode: SourceCode = name match {
+    case None =>
+      (SourceCode(s"${JSExpr.params(params)} => ") ++ (body match {
+        case Left(expr: JSRecord) => expr.toSourceCode.parenthesized
+        case Left(expr) => expr.toSourceCode
+        case Right(stmts) =>
+          stmts.foldLeft(SourceCode.empty) { _ + _.toSourceCode }.block
+      })).parenthesized ++ JSExpr.arguments(arguments)
+    case Some(fnName) =>
+      (SourceCode(s"function $fnName${JSExpr.params(params)} ") ++ (body match {
+        case Left(expr) => expr.`return`.toSourceCode
+        case Right(stmts) =>
+          stmts.foldLeft(SourceCode.empty) { _ + _.toSourceCode }
+      }).block).parenthesized ++ JSExpr.arguments(arguments)
   }
 }
 

@@ -32,7 +32,7 @@ def foo b x = case b of {
   | Derived1 -> b.M2
   | Base1 -> b.M1 x
   }
-//│ foo: (Base1['A] & ~derived1 | Derived1) -> 'A -> (Base1['A] | Derived1)
+//│ foo: (Base1['A] & ~#Derived1 | Derived1) -> 'A -> (Base1['A] | Derived1)
 //│    = [Function: foo]
 
 d1 = Derived1 { x = 1 }
@@ -61,7 +61,7 @@ bar0 d1 0
 // This is ill-typed because type `Base1[int]` includes things like `Derived1\x` (a `Derived` instance without an `x` field)
 :e
 def bar0 = foo
-//│ (Base1['A] & ~derived1 | Derived1) -> 'A -> (Base1['A] | Derived1)
+//│ (Base1['A] & ~#Derived1 | Derived1) -> 'A -> (Base1['A] | Derived1)
 //│   <:  bar0:
 //│ Base1[int] -> int -> Base1[int]
 //│ ╔══[ERROR] Type mismatch in def definition:
@@ -74,7 +74,7 @@ def bar0 = foo
 //│ ╟── from refined scrutinee:
 //│ ║  l.31: 	def foo b x = case b of {
 //│ ╙──      	                   ^
-//│     = [Function: foo]
+//│     = [Function: bar0]
 
 def bar1: Type1[int] -> int -> Type1[int]
 bar1 d1
@@ -90,7 +90,7 @@ bar1 d1 0
 
 :e
 def bar1 = foo
-//│ (Base1['A] & ~derived1 | Derived1) -> 'A -> (Base1['A] | Derived1)
+//│ (Base1['A] & ~#Derived1 | Derived1) -> 'A -> (Base1['A] | Derived1)
 //│   <:  bar1:
 //│ Type1[?] -> int -> Type1[?]
 //│ ╔══[ERROR] Type mismatch in def definition:
@@ -177,7 +177,7 @@ def bar1 = foo
 //│ ╟── from applied type reference:
 //│ ║  l.79: 	def bar1: Type1[int] -> int -> Type1[int]
 //│ ╙──      	                               ^^^^^^^^^^
-//│     = [Function: foo]
+//│     = [Function: bar1]
 
 def bar2: Base1['a] -> 'a -> Base1['a]
 bar2 d1
@@ -194,7 +194,7 @@ bar2 d1 0
 // Note that typing this would require GADT reasoning! Though it also suffers from the previous "Derived1 with missing x field" problem.
 :e
 def bar2 = foo
-//│ (Base1['A] & ~derived1 | Derived1) -> 'A -> (Base1['A] | Derived1)
+//│ (Base1['A] & ~#Derived1 | Derived1) -> 'A -> (Base1['A] | Derived1)
 //│   <:  bar2:
 //│ Base1['a] -> 'a -> Base1['a]
 //│ ╔══[ERROR] Type mismatch in def definition:
@@ -225,5 +225,5 @@ def bar2 = foo
 //│ ╟── Note: constraint arises from type reference:
 //│ ║  l.4: 	class Derived1: Base1[int] & { x: int }
 //│ ╙──     	                      ^^^
-//│     = [Function: foo]
+//│     = [Function: bar2]
 
