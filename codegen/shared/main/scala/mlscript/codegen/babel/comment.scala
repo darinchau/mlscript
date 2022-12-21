@@ -1,22 +1,26 @@
 package mlscript.codegen.babel
 
-trait BaseComment {
+import mlscript.codegen.{Position, Location}
+
+trait BaseComment:
   val value: String
   val start: Option[Int]
   val end: Option[Int]
-  val loc: Option[SourceLocation]
+  val loc: Option[Location]
   val ignore: Option[Boolean]
-  val tp: "CommentBlock" | "CommentLine"
-}
+  val kind: CommentKind
 
-case class SourcePosition(line: Int, column: Int)
+enum CommentKind:
+  case Block
+  case Line
 
-case class SourceLocation(start: SourcePosition, end: SourcePosition)
+enum CommentSkipNewLine:
+  case Default
+  case All
+  case Leading
+  case Trailing
 
-enum COMMENT_SKIP_NEWLINE {
-  case DEFAULT, ALL, LEADING, TRAILING
-}
-
-enum COMMENT_TYPE {
-  case LEADING, INNER, TRAILING
-}
+enum CommentType:
+  case Leading
+  case Inner
+  case Trailing

@@ -3,25 +3,24 @@ package mlscript.codegen.generator
 import scala.util.matching.Regex
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import mlscript.codegen.babel._
+import mlscript.codegen.{Position, Location, LocationType}
+
+class NewLineState(var printed: Boolean)
 
 class Printer(format: Format, map: SourceMap) {
-  private type NewlineState = {
-    var printed: Boolean
-  }
-
   private val PURE_ANNOTATION_RE = "^\\s*[@#]__PURE__\\s*$".r
 
   private var indentLevel: Int = 0
-  private val _buf = new Buffer(map)
+  private val _buf = new Buffer(Some(map))
   private var _noLineTerminator = false
   private var _endsWithWord = false
   private var _endWithInteger = false
-  private var _indentChar = '\0'
+  private var _indentChar = '\u0000'
   private var _indentRepeat = 0
   private var _endsWithInteger = false
   private var _endWithInnerRaw = false
   private var _indentInnerComments = true
-  private var _parenPushNewlineState: Option[NewlineState] = None
+  private var _parenPushNewlineState: Option[NewLineState] = None
   private var _printAuxAfterOnNextUserNode = false
   private var _printStack = new ArrayBuffer[BaseNode]()
   private var _printedComments = new HashSet[BaseComment]()
@@ -41,8 +40,8 @@ class Printer(format: Format, map: SourceMap) {
 
   def semicolon(force: Boolean = false): Unit = {
     this._maybeAddAuxComment()
-    if (force) this._appendChar(CharCode.semicolon)
-    else this._queue(CharCode.semicolon)
+    if (force) this._appendChar(';')
+    else this._queue(';')
 
     this._noLineTerminator = false
   }
@@ -54,17 +53,17 @@ class Printer(format: Format, map: SourceMap) {
 
   def space(force: Boolean = false): Unit =
     if (!format.compact) {
-      if (force) this._space
+      if (force) _space()
       else if (_buf.hasContent) {
         val lastCp = getLastChar()
-        if (lastCp != CharCodes.space && lastCp != CharCodes.lineFeed)
-          this._space
+        if (lastCp != ' ' && lastCp != '\n')
+          _space()
       }
     }
 
   def word(str: String, noLineTerminatorAfter: Boolean = false) = {
     this._maybePrintInnerComments()
-    if (this._endsWithWord || (str.charAt(0) == CharCode.slash && this.endsWith(CharCode.slash)))
+    if (this._endsWithWord || (str.charAt(0) == '/' && this.endsWith('/')))
       this.space()
 
     this._maybeAddAuxComment()
@@ -82,14 +81,14 @@ class Printer(format: Format, map: SourceMap) {
   def token(str: String, maybeNewline: Boolean = false): Unit = {
     this._maybePrintInnerComments()
 
-    val lastChar = this.getLastChar
+    val lastChar = this.getLastChar()
     val strFirst = str.charAt(0)
     
-    if ((lastChar == CharCodes.exclamationMark && str === "--") ||
-        (strFirst == CharCodes.plusSign && lastChar == CharCodes.plusSign) ||
-        (strFirst == CharCodes.dash && lastChar == CharCodes.dash) ||
-        (strFirst == CharCodes.dot && this._endWithInteger))
-      this._space
+    if ((lastChar == '!' && str == "--") ||
+        (strFirst == '+' && lastChar == '+') ||
+        (strFirst == '-' && lastChar == '-') ||
+        (strFirst == '.' && this._endWithInteger))
+      _space()
 
     this._maybeAddAuxComment()
     this._append(str, maybeNewline)
@@ -106,16 +105,15 @@ class Printer(format: Format, map: SourceMap) {
       if (!force && !format.retainLines && !format.compact && format.concise)
         this.space()
       else if (force) {
-        var ii: Int
         for (ii <- 0 until (if (i > 2) 2 else i) - _buf.getNewlineCount)
           this._newline()
       }
     }
 
   def endsWith(char: Char): Boolean =
-    this.getLastChar == char
+    this.getLastChar() == char
 
-  def getLastChar: Char = this._buf.getLastChar
+  def getLastChar(): Char = this._buf.getLastChar
 
   def endsWithCharAndNewline =
     this._buf.endsWithCharAndNewline
@@ -128,7 +126,7 @@ class Printer(format: Format, map: SourceMap) {
     // @see printer.ts line 326
   }
 
-  def source(prop: LocType, loc: Option[Loc]): Unit =
+  def source(prop: LocationType, loc: Option[Location]): Unit =
     if (!loc.isEmpty) {
       this._catchUp(prop, loc)
       this._buf.source(prop, loc)
@@ -144,8 +142,8 @@ class Printer(format: Format, map: SourceMap) {
     // @see printer.ts line 355
   }
 
-  private def _space = this._queue(CharCodes.space)
-  private def _newline = this._queue(CharCodes.lineFeed)
+  private def _space() = this._queue(' ')
+  private def _newline() = this._queue('\n')
 
   private def _append(str: String, maybeNewline: Boolean): Unit = {
     this._maybeAddParen(str)
@@ -179,16 +177,16 @@ class Printer(format: Format, map: SourceMap) {
 
   private def _maybeIndent(firstChar: Char): Unit =
     if (this.indentLevel > 0 &&
-        firstChar != CharCodes.lineFeed &&
-        this.endsWith(CharCodes.lineFeed))
+        firstChar != '\n' &&
+        this.endsWith('\n'))
       this._buf.queueIndentation(this._indentChar, this._getIndent)
 
   private def _shouldIndent(firstChar: Char) =
-    this.indentLevel > 0 && firstChar != CharCode.lineFeed && this.endsWith(CharCode.lineFeed)
+    this.indentLevel > 0 && firstChar != '\n' && this.endsWith('\n')
 
   private def _maybeAddParenChar(char: Char): Unit =
-    if (!_parenPushNewlineState.isEmpty && char != CharCodes.space) {
-      if (char != CharCodes.lineFeed)
+    if (!_parenPushNewlineState.isEmpty && char != ' ') {
+      if (char != '\n')
         this._parenPushNewlineState = None
       else {
         this.token("(")
@@ -200,15 +198,15 @@ class Printer(format: Format, map: SourceMap) {
   private def _maybeAddParen(str: String): Unit =
     if (!_parenPushNewlineState.isEmpty) {
       val len = str.length()
-      val noSpaceIndex = str.indexWhere((c) => c != CharCodes.space)
+      val noSpaceIndex = str.indexWhere((c) => c != ' ')
       if (noSpaceIndex < len) {
         val char = str.charAt(noSpaceIndex)
-        if (char == CharCodes.lineFeed) {
-          if (char != CharCodes.slash || noSpaceIndex + 1 == len)
+        if (char == '\n') {
+          if (char != '/' || noSpaceIndex + 1 == len)
             this._parenPushNewlineState = None
           else {
             val charPost = str.charAt(noSpaceIndex + 1)
-            if (charPost == CharCodes.asterisk) {
+            if (charPost == '*') {
               (PURE_ANNOTATION_RE findFirstIn str.slice(noSpaceIndex + 2, len - 2)) match {
                 case None => {
                   this.token("(")
@@ -218,7 +216,7 @@ class Printer(format: Format, map: SourceMap) {
                 case _ => ()
               }
             }
-            else if (charPost != CharCodes.slash) {
+            else if (charPost != '/') {
               this._parenPushNewlineState = None
             }
             else {
@@ -241,18 +239,15 @@ class Printer(format: Format, map: SourceMap) {
     // @see printer.ts line 517
   }
 
-  private def _catchUp(prop: LocType, loc: Option[Loc]): Unit =
-    if (this.format.retainLines && !loc.isEmpty) {
-      val pos = prop match {
-        case "start" => loc.get.start
-        case _ => loc.get.end
-      }
-
-      var count: Int
-      for (count <- 0 until (pos.line - this._buf.getCurrentLine)) {
-        this._newline()
-      }
-    }
+  private def _catchUp(prop: LocationType, optLoc: Option[Location]): Unit =
+    if (this.format.retainLines)
+      optLoc match
+        case Some(loc) => 
+          val pos = loc(prop)
+          for (count <- 0 until (pos.get.line - this._buf.getCurrentLine)) {
+            this._newline()
+          }
+        case None => ()
 
   private def _getIndent: Int =
     this._indentRepeat * this.indentLevel
@@ -274,7 +269,7 @@ class Printer(format: Format, map: SourceMap) {
     // @see printer.ts line 610
   }
 
-  private def _maybeAddAuxComment(enteredPositionlessNode: Boolean): Unit =
+  private def _maybeAddAuxComment(enteredPositionlessNode: Boolean = false): Unit =
     if (enteredPositionlessNode) this._printAuxBeforeComment()
     else this._printAuxAfterComment()
 
@@ -284,7 +279,7 @@ class Printer(format: Format, map: SourceMap) {
       if (!this.format.auxiliaryCommentBefore.isEmpty) {
         // FIXME: Use correct comment type
         // @see printer.ts line 691
-        // this._printComment(new BaseComment, COMMENT_SKIP_NEWLINE.DEFAULT)
+        // this._printComment(new BaseComment, CommentSkipNewLine.Default)
       }
     }
 
@@ -294,7 +289,7 @@ class Printer(format: Format, map: SourceMap) {
       if (!this.format.auxiliaryCommentAfter.isEmpty) {
         // FIXME: Use correct comment type
         // @see printer.ts line 707
-        // this._printComment(new BaseComment, COMMENT_SKIP_NEWLINE.DEFAULT)
+        // this._printComment(new BaseComment, CommentSkipNewLine.Default)
       }
     }
 
@@ -337,13 +332,15 @@ class Printer(format: Format, map: SourceMap) {
 
   def printInnerComments(): Unit = {
     val node = _printStack.last
-    val comments: Option[Array[BaseComment]] = node.innerComments // FIXME: Get correct node
+    val comments: Option[Array[BaseComment]] =
+      // node.innerComments // FIXME: Get correct node
+      ???
     if (!comments.isEmpty & comments.get.length > 0) {
-      val hasSpace = this.endsWith(CharCode.space)
+      val hasSpace = this.endsWith(' ')
       val printedCommentsCount = this._printedComments.size
       if (this._indentInnerComments) this.indent()
 
-      this._printComments(COMMENT_TYPE.INNER ,comments.get, node)
+      this._printComments(CommentType.Inner ,comments.get, node)
       if (hasSpace && printedCommentsCount != this._printedComments.size)
         this.space()
       if (this._indentInnerComments) this.dedent()
@@ -372,42 +369,43 @@ class Printer(format: Format, map: SourceMap) {
     // @see printer.ts line 921
   }
 
-  private def _printComment(comment: BaseComment, skipNewLines: COMMENT_SKIP_NEWLINE) = {
-    val isBlockComment = comment.tp == "CommentBlock"
+  private def _printComment(comment: BaseComment, skipNewLines: CommentSkipNewLine) = {
+    val isBlockComment = comment.kind == CommentKind.Block
     val printNewLines =
-      isBlockComment && skipNewLines != COMMENT_SKIP_NEWLINE.ALL && !this._noLineTerminator
+      isBlockComment && skipNewLines != CommentSkipNewLine.All && !this._noLineTerminator
     
-    if (printNewLines && this._buf.hasContent && skipNewLines != COMMENT_SKIP_NEWLINE.LEADING)
+    if (printNewLines && this._buf.hasContent && skipNewLines != CommentSkipNewLine.Leading)
       this.newline(1)
 
     val value: String = if (isBlockComment) {
       if (this.format.adjustMultilineComment) {
         // FIXME: Use correct comment type
         // @see printer.ts line 973
+        ???
       }
       else s"/*${comment.value}*/"
     }
     else if (!_noLineTerminator) s"//${comment.value}"
     else s"/*${comment.value}*/"
 
-    if (this.endsWith(CharCodes.slash)) this._space
+    if (this.endsWith('/')) _space()
 
-    this.source("start", comment.loc)
+    this.source(LocationType.Start, comment.loc)
     this._append(value, isBlockComment)
 
     if (!isBlockComment && !_noLineTerminator) this.newline(1, true)
-    if (printNewLines && skipNewLines != COMMENT_SKIP_NEWLINE.TRAILING)
+    if (printNewLines && skipNewLines != CommentSkipNewLine.Trailing)
       this.newline(1)
   }
 
   private def _printComments(
-    tp: COMMENT_TYPE,
+    ty: CommentType,
     comments: Array[BaseComment],
     node: BaseNode,
     parent: Option[BaseNode] = None,
     lineOffset: Int = 0
-  ) = {
+  ) =
     // TODO: Finish print comments
     // @see printer.ts line 1016
-  }
+    ???
 }
