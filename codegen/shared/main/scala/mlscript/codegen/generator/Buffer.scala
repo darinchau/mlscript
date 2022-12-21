@@ -253,8 +253,6 @@ class Buffer(_map: Option[SourceMap]) {
   def hasContent: Boolean =
     !_queue.isEmpty || this._last != '\0'
 
-  private type LocType = "start" | "end"
-
   def exactSource(loc: Option[Loc], cb: () => Unit): Unit =
     if (this._map.isEmpty) cb()
     else {
