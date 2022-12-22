@@ -7,6 +7,23 @@ import mlscript.codegen.{Position, Location, LocationType}
 
 class NewLineState(var printed: Boolean)
 
+trait AddNewlineOptions(val nextNodeStartLine: Int) {
+  def addNewlines(leading: Boolean, node: BaseNode): Int
+}
+
+trait PrintSequenceOptions(
+  val statement: Option[Boolean],
+  val indent: Option[Boolean],
+  val trailingCommentsLineOffset: Option[Int]
+) // TODO: extends Partial<AddNewlinesOptions>
+
+trait printListOptions(
+  val separator: Option[(Printer) => Unit],
+  val iterator: Option[(BaseNode, Int) => Unit],
+  val statement: Option[Boolean],
+  val indent: Option[Boolean]
+)
+
 class Printer(format: Format, map: SourceMapBuilder) {
   private val PURE_ANNOTATION_RE = "^\\s*[@#]__PURE__\\s*$".r
 
@@ -24,8 +41,10 @@ class Printer(format: Format, map: SourceMapBuilder) {
   private var _printAuxAfterOnNextUserNode = false
   private var _printStack = new ArrayBuffer[BaseNode]()
   private var _printedComments = new HashSet[BaseComment]()
+  private var _insideAux = false
+  private var _lastCommentLine = 0
 
-  def generate(ast: BaseNode) = {
+  def generate(ast: BaseNode): BufferOutput = {
     print(Some(ast))
     _maybeAddAuxComment()
 
@@ -46,7 +65,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
     _noLineTerminator = false
   }
 
-  def rightBrace = {
+  def rightBrace: Unit = {
     if (format.minified) _buf.removeLastSemicolon()
     token("}")
   }
@@ -61,7 +80,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
       }
     }
 
-  def word(str: String, noLineTerminatorAfter: Boolean = false) = {
+  def word(str: String, noLineTerminatorAfter: Boolean = false): Unit = {
     _maybePrintInnerComments()
     if (_endsWithWord || (str.charAt(0) == '/' && endsWith('/')))
       space()
@@ -73,9 +92,14 @@ class Printer(format: Format, map: SourceMapBuilder) {
     _noLineTerminator = noLineTerminatorAfter
   }
 
-  // TODO:
-  // @see printer.ts line 220
-  def number(str: String): Unit = ???
+  def number(str: String): Unit = {
+    word(str)
+
+    // TODO: Add reg test
+    _endsWithInteger =
+      (try { java.lang.Double.parseDouble(str); true } catch {case _ => false}) &&
+      str.last != '.'
+  }
 
   def token(str: String, maybeNewline: Boolean = false): Unit = {
     _maybePrintInnerComments()
@@ -94,9 +118,19 @@ class Printer(format: Format, map: SourceMapBuilder) {
     _noLineTerminator = false
   }
 
-  // TODO:
-  // @see printer.ts line 260
-  def tokenChar(char: Char): Unit = ???
+  def tokenChar(char: Char): Unit = {
+    _maybePrintInnerComments()
+    val lastChar = getLastChar()
+
+    if ((char == '+' && lastChar == '+') ||
+        (char == '-' && lastChar == '-') ||
+        (char == '.' && lastChar == '.'))
+      _space()
+
+    _maybeAddAuxComment()
+    _appendChar(char)
+    _noLineTerminator = false
+  }
 
   def newline(i: Int = 1, force: Boolean = false): Unit =
     if (i > 0) {
@@ -113,29 +147,45 @@ class Printer(format: Format, map: SourceMapBuilder) {
 
   def getLastChar(): Char = _buf.getLastChar
 
-  def endsWithCharAndNewline =
+  def endsWithCharAndNewline: Option[Char] =
     _buf.endsWithCharAndNewline
 
-  def removeTrailingNewline = 
+  def removeTrailingNewline: Unit = 
     _buf.removeTrailingNewline()
 
-  // TODO:
-  // @see printer.ts line 326
-  def exactSource() = ???
+  def exactSource(loc: Option[Location], cb: ()=>Unit): Unit = {
+    if (loc.isEmpty) cb()
+    else {
+      _catchUp(LocationType.Start, loc)
+      _buf.exactSource(loc, cb)
+    }
+  }
 
   def source(prop: LocationType, loc: Option[Location]): Unit =
     if (!loc.isEmpty) {
       _catchUp(prop, loc)
       _buf.source(prop, loc)
     }
-  
-  // TODO:
-  // @see printer.ts line 342
-  def sourceWithOffset() = ???
 
-  // TODO:
-  // @see printer.ts line 355
-  def withSource() = ???
+  def sourceWithOffset(
+    prop: LocationType, 
+    loc: Option[Location],
+    lineOffset: Int,
+    columnOffset: Int
+  ): Unit = if (!loc.isEmpty) {
+    _catchUp(prop, loc)
+    _buf.sourceWithOffset(prop, loc, lineOffset, columnOffset)
+  }
+
+  def withSource(
+    prop: LocationType, 
+    loc: Option[Location],
+    cb: ()=>Unit
+  ): Unit = if (loc.isEmpty) cb()
+      else {
+        _catchUp(prop, loc)
+        _buf.withSource(prop, loc, cb)
+      }
 
   private def _space() = _queue(' ')
   private def _newline() = _queue('\n')
@@ -229,9 +279,11 @@ class Printer(format: Format, map: SourceMapBuilder) {
       }
     }
 
-  // TODO:
-  // @see printer.ts line 517
-  def catchUp(line: Int) = ???
+  def catchUp(line: Int): Unit =
+    if (format.retainLines && line > _buf.getCurrentLine) {
+      _newline()
+      catchUp(line)
+    }
 
   private def _catchUp(prop: LocationType, optLoc: Option[Location]): Unit =
     if (format.retainLines)
@@ -246,9 +298,22 @@ class Printer(format: Format, map: SourceMapBuilder) {
   private def _getIndent: Int =
     _indentRepeat * indentLevel
 
-  // TODO:
-  // @see printer.ts line 550
-  def printTerminatorless() = ???
+  def printTerminatorless(node: BaseNode, parent: BaseNode, isLabel: Boolean): Unit =
+    if (isLabel) {
+      _noLineTerminator = true
+      print(Some(node), Some(parent))
+    }
+    else {
+      val terminatorState = new NewLineState(false)
+      _parenPushNewlineState = Some(terminatorState)
+      print(Some(node), Some(parent))
+
+      if (terminatorState.printed) {
+        dedent()
+        newline()
+        token(")")
+      }
+    }
 
   def print(
     node: Option[BaseNode],
@@ -256,11 +321,50 @@ class Printer(format: Format, map: SourceMapBuilder) {
     noLineTerminatorAfter: Boolean = false,
     trailingCommentsLineOffset: Int = 0,
     forceParens: Boolean = false
-  ) = if (!node.isEmpty) {
+  ): Unit = if (!node.isEmpty) {
     _endWithInnerRaw = false
-    // TODO: Finish print
-    // @see printer.ts line 610
-    ???
+    val oldConcise = format.concise
+    // if (node._compact) format.concise = true
+    // TODO: Get print method
+    
+    _printStack = _printStack :+ (node.get)
+    val oldAux = _insideAux
+    // TODO: _insideAux = node.loc.isEmpty
+    _maybeAddAuxComment(oldAux && _insideAux)
+
+    val shouldPrintParens: Boolean =
+      if (forceParens) true
+      else if (format.retainFunctionParens) true // TODO: nodeType
+      else Printer.needsParens(node, parent, Some(_printStack.toArray))
+
+    if (shouldPrintParens) {
+      token("(")
+      _endWithInnerRaw = false
+    }
+
+    _lastCommentLine = 0
+    _printLeadingComments(node, parent)
+
+    val loc = LocationType.Start // TODO: nodeType === "Program" || nodeType === "File" ? null : node.loc;
+    // TODO: exactSource(loc)
+
+    if (shouldPrintParens) {
+      _printTrailingComments(node, parent)
+      token(")")
+      _noLineTerminator = noLineTerminatorAfter
+    }
+    else if (noLineTerminatorAfter && !_noLineTerminator) {
+      _noLineTerminator = true
+      _printTrailingComments(node, parent)
+    }
+    else {
+      _printTrailingComments(node, parent, trailingCommentsLineOffset)
+    }
+
+    _printStack.dropRightInPlace(1)
+    format.concise = oldConcise
+    _insideAux = oldAux
+    _endWithInnerRaw = false
   }
 
   private def _maybeAddAuxComment(enteredPositionlessNode: Boolean = false): Unit =
@@ -271,7 +375,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
     if (!_printAuxAfterOnNextUserNode) {
       _printAuxAfterOnNextUserNode = true
       if (!format.auxiliaryCommentBefore.isEmpty) {
-        // FIXME: Use correct comment type
+        // TODO: Use correct comment type
         // @see printer.ts line 691
         // _printComment(new BaseComment, CommentSkipNewLine.Default)
         ???
@@ -282,36 +386,40 @@ class Printer(format: Format, map: SourceMapBuilder) {
     if (!_printAuxAfterOnNextUserNode) {
       _printAuxAfterOnNextUserNode = true
       if (!format.auxiliaryCommentAfter.isEmpty) {
-        // FIXME: Use correct comment type
+        // TODO: Use correct comment type
         // @see printer.ts line 707
         // _printComment(new BaseComment, CommentSkipNewLine.Default)
         ???
       }
     }
 
-  // TODO:
-  // @see printer.ts line 717
-  def getPossibleRaw = ???
+  def getPossibleRaw(node: BaseNode): Option[String] = {
+    // TODO: val extra = node.extra
+    ???
+  }
 
   // TODO:
   // @see printer.ts line 738
-  def printJoin() = ???
+  def printJoin(): Unit = ???
 
-  // TODO:
-  // @see printer.ts line 782
-  def printAndIndentOnComments() = ???
+  def printAndIndentOnComments(node: BaseNode, parent: BaseNode) = {
+    val needIndent: Boolean = ??? // TODO: node.leadingComments && node.leadingComments.length > 0
+    if (needIndent) indent()
+    print(Some(node), Some(parent))
+    if (needIndent) dedent()
+  }
 
   // TODO:
   // @see printer.ts line 789
-  def printBlock() = ???
+  def printBlock(): Unit = ???
 
-  // TODO:
-  // @see printer.ts line 799
-  private def _printTrailingComments() = ???
+  private def _printTrailingComments(node: Option[BaseNode], parent: Option[BaseNode], lineOffset: Int = 0) = {
+    // TODO: val comments = node.leadingComments
+  }
 
-  // TODO:
-  // @see printer.ts line 824
-  private def _printLeadingComments() = ???
+  private def _printLeadingComments(node: Option[BaseNode], parent: Option[BaseNode]) = {
+    // TODO: val comments = node.leadingComments
+  }
 
   private def _maybePrintInnerComments(): Unit = {
     if (_endWithInnerRaw) printInnerComments()
@@ -323,7 +431,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
   def printInnerComments(): Unit = {
     val node = _printStack.last
     val comments: Option[Array[BaseComment]] =
-      // node.innerComments // FIXME: Get correct node
+      // node.innerComments // TODO: Get correct node
       ???
     if (!comments.isEmpty & comments.get.length > 0) {
       val hasSpace = endsWith(' ')
@@ -337,7 +445,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
     }
   }
 
-  def noIndentInneerCommentsHere() = _indentInnerComments = false
+  def noIndentInneerCommentsHere(): Unit = _indentInnerComments = false
 
   // TODO:
   // @see printer.ts line 856
@@ -365,7 +473,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
 
     val value: String = if (isBlockComment) {
       if (format.adjustMultilineComment) {
-        // FIXME: Use correct comment type
+        // TODO: Use correct comment type
         // @see printer.ts line 973
         ???
       }
@@ -394,4 +502,19 @@ class Printer(format: Format, map: SourceMapBuilder) {
     // TODO: Finish print comments
     // @see printer.ts line 1016
     ???
+}
+
+object Printer {
+  def needsParens(
+    node: Option[BaseNode],
+    parent: Option[BaseNode],
+    printStack: Option[Array[BaseNode]]
+  ): Boolean = if (parent.isEmpty) false
+      else {
+        // TODO: check node type
+        // @ see index.ts line 114
+        ???
+      }
+
+  type PrintJoinOptions = printListOptions & PrintSequenceOptions
 }
