@@ -13,11 +13,11 @@ private case class QueueItem(
 class BufferOutput(
   val code: String,
   val decodeMap: Option[Any], // TODO: Fill the right types after they're done.
-  val map: Option[SourceMap],
+  val map: Option[SourceMapBuilder],
   val rawMappings: Option[Any] // TODO: Fill the right types after they're done.
 )
 
-class Buffer(_map: Option[SourceMap]) {
+class Buffer(_map: Option[SourceMapBuilder]) {
   private var _position: Position = Position(1, 0)
 
   private var _sourcePosition: SourcePosition = SourcePosition()

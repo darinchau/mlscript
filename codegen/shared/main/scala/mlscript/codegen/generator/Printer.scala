@@ -7,7 +7,7 @@ import mlscript.codegen.{Position, Location, LocationType}
 
 class NewLineState(var printed: Boolean)
 
-class Printer(format: Format, map: SourceMap) {
+class Printer(format: Format, map: SourceMapBuilder) {
   private val PURE_ANNOTATION_RE = "^\\s*[@#]__PURE__\\s*$".r
 
   private var indentLevel: Int = 0
