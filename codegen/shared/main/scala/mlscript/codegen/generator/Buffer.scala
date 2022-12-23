@@ -2,6 +2,7 @@ package mlscript.codegen.generator
 
 import scala.collection.mutable.{StringBuilder, ArrayDeque}
 import mlscript.codegen.{Position, Location, LocationType}
+import mlscript.codegen.babel.BaseNode
 
 private case class QueueItem(
   val char: Char,
@@ -185,11 +186,11 @@ class Buffer(map: Option[SourceMapBuilder]) {
   def hasContent: Boolean =
     !revertableQueue.isEmpty || last != '\u0000'
 
-  def exactSource(loc: Option[Location], cb: () => Unit): Unit =
-    if (map.isEmpty) cb()
+  def exactSource(loc: Option[Location], node: BaseNode, parent: BaseNode, printer: Printer): Unit =
+    if (map.isEmpty) node.print(printer, parent)
     else {
       source(LocationType.Start, loc)
-      cb()
+      node.print(printer, parent)
       source(LocationType.End, loc)
     }
 
@@ -204,11 +205,11 @@ class Buffer(map: Option[SourceMapBuilder]) {
   ): Unit =
     if (!map.isEmpty) normalizePosition(prop, loc, lineOffset, columnOffset)
 
-  def withSource(prop: LocationType, loc: Option[Location], cb: () => Unit): Unit =
-    if (map.isEmpty) cb()
+  def withSource(prop: LocationType, loc: Option[Location], node: BaseNode, parent: BaseNode, printer: Printer): Unit =
+    if (map.isEmpty) node.print(printer, parent)
     else {
       source(prop, loc)
-      cb()
+      node.print(printer, parent)
     }
 
   private def normalizePosition(

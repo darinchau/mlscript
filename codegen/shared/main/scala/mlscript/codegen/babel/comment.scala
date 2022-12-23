@@ -8,11 +8,6 @@ trait BaseComment:
   val end: Option[Int]
   val loc: Option[Location]
   val ignore: Option[Boolean]
-  val kind: CommentKind
-
-enum CommentKind:
-  case Block
-  case Line
 
 enum CommentSkipNewLine:
   case Default
@@ -24,3 +19,23 @@ enum CommentType:
   case Leading
   case Inner
   case Trailing
+
+enum PrintCommentHint:
+  case Skip
+  case Allow
+  case Defer
+
+// TODO: Fix other fields
+case class CommentBlock(value: String) extends BaseComment {
+  val start: Option[Int] = None
+  val end: Option[Int] = None
+  val loc: Option[Location] = None
+  val ignore: Option[Boolean] = None
+}
+
+case class CommentLine(value: String) extends BaseComment {
+  val start: Option[Int] = None
+  val end: Option[Int] = None
+  val loc: Option[Location] = None
+  val ignore: Option[Boolean] = None
+}
