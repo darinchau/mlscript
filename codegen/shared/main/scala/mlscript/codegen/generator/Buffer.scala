@@ -44,7 +44,7 @@ class Buffer(map: Option[SourceMapBuilder]) {
    */
   def get(): BufferOutput = {
     flush()
-    val code = buf.toString().trim // FIXME: TrimRight
+    val code = buf.toString().reverse.dropWhile(_.isWhitespace).reverse
     new BufferOutput(code, None, None, None)
   }
 
@@ -124,7 +124,7 @@ class Buffer(map: Option[SourceMapBuilder]) {
       // If the string starts with a newline char, then adding a mark is redundant.
       // This catches both "no newlines" and "newline after several chars".
       if (!str.startsWith("\n"))
-        mark(Some(sourcePosition.line.get), sourcePosition.column, sourcePosition.identifierName, sourcePosition.fileName)
+        mark(sourcePosition.line, sourcePosition.column, sourcePosition.identifierName, sourcePosition.fileName)
 
       str.split("\n").zipWithIndex.foreach((ls, i) => {
         position = position.nextLine
@@ -144,7 +144,9 @@ class Buffer(map: Option[SourceMapBuilder]) {
     column: Option[Int],
     identifierName: Option[String],
     fileName: Option[String]
-  ): Unit = ??? // TODO: Mark on Source Map
+  ): Unit = if (!map.isEmpty)
+      map.get.mark(position, Position(line.get, column.get),
+        fileName.getOrElse(""), identifierName)
 
   def removeTrailingNewline(): Unit =
     if (!revertableQueue.isEmpty && revertableQueue.last.char == '\n')
