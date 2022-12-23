@@ -16,3 +16,9 @@ package object generator:
 
   object SourcePosition:
     def apply(): SourcePosition = SourcePosition(None, None, None, None)
+
+  enum CommentSkipNewLine:
+    case Default
+    case All
+    case Leading
+    case Trailing

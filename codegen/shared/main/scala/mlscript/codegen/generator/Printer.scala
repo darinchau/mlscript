@@ -2,13 +2,13 @@ package mlscript.codegen.generator
 
 import scala.util.matching.Regex
 import scala.collection.mutable.{ArrayBuffer, HashSet}
-import mlscript.codegen.babel._
 import mlscript.codegen.{Position, Location, LocationType}
+import mlscript.codegen.ast.{Comment, CommentKind, CommentType, Node}
 
 class NewLineState(var printed: Boolean)
 
 trait AddNewlineOptions(val nextNodeStartLine: Int) {
-  def addNewlines(leading: Boolean, node: BaseNode): Int
+  def addNewlines(leading: Boolean, node: Node): Int
 }
 
 trait PrintSequenceOptions(
@@ -19,7 +19,7 @@ trait PrintSequenceOptions(
 
 trait printListOptions(
   val separator: Option[(Printer) => Unit],
-  val iterator: Option[(BaseNode, Int) => Unit],
+  val iterator: Option[(Node, Int) => Unit],
   val statement: Option[Boolean],
   val indent: Option[Boolean]
 )
@@ -39,12 +39,12 @@ class Printer(format: Format, map: SourceMapBuilder) {
   private var _indentInnerComments = true
   private var _parenPushNewlineState: Option[NewLineState] = None
   private var _printAuxAfterOnNextUserNode = false
-  private var _printStack = new ArrayBuffer[BaseNode]()
-  private var _printedComments = new HashSet[BaseComment]()
+  private var _printStack = new ArrayBuffer[Node]()
+  private var _printedComments = new HashSet[Comment]()
   private var _insideAux = false
   private var _lastCommentLine = 0
 
-  def generate(ast: BaseNode): BufferOutput = {
+  def generate(ast: Node): BufferOutput = {
     print(Some(ast))
     _maybeAddAuxComment()
 
@@ -298,7 +298,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
   private def _getIndent: Int =
     _indentRepeat * indentLevel
 
-  def printTerminatorless(node: BaseNode, parent: BaseNode, isLabel: Boolean): Unit =
+  def printTerminatorless(node: Node, parent: Node, isLabel: Boolean): Unit =
     if (isLabel) {
       _noLineTerminator = true
       print(Some(node), Some(parent))
@@ -316,8 +316,8 @@ class Printer(format: Format, map: SourceMapBuilder) {
     }
 
   def print(
-    node: Option[BaseNode],
-    parent: Option[BaseNode] = None,
+    node: Option[Node],
+    parent: Option[Node] = None,
     noLineTerminatorAfter: Boolean = false,
     trailingCommentsLineOffset: Int = 0,
     forceParens: Boolean = false
@@ -393,7 +393,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
       }
     }
 
-  def getPossibleRaw(node: BaseNode): Option[String] = {
+  def getPossibleRaw(node: Node): Option[String] = {
     // TODO: val extra = node.extra
     ???
   }
@@ -402,7 +402,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
   // @see printer.ts line 738
   def printJoin(): Unit = ???
 
-  def printAndIndentOnComments(node: BaseNode, parent: BaseNode) = {
+  def printAndIndentOnComments(node: Node, parent: Node) = {
     val needIndent: Boolean = ??? // TODO: node.leadingComments && node.leadingComments.length > 0
     if (needIndent) indent()
     print(Some(node), Some(parent))
@@ -413,11 +413,11 @@ class Printer(format: Format, map: SourceMapBuilder) {
   // @see printer.ts line 789
   def printBlock(): Unit = ???
 
-  private def _printTrailingComments(node: Option[BaseNode], parent: Option[BaseNode], lineOffset: Int = 0) = {
+  private def _printTrailingComments(node: Option[Node], parent: Option[Node], lineOffset: Int = 0) = {
     // TODO: val comments = node.leadingComments
   }
 
-  private def _printLeadingComments(node: Option[BaseNode], parent: Option[BaseNode]) = {
+  private def _printLeadingComments(node: Option[Node], parent: Option[Node]) = {
     // TODO: val comments = node.leadingComments
   }
 
@@ -430,7 +430,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
 
   def printInnerComments(): Unit = {
     val node = _printStack.last
-    val comments: Option[Array[BaseComment]] =
+    val comments: Option[Array[Comment]] =
       // node.innerComments // TODO: Get correct node
       ???
     if (!comments.isEmpty & comments.get.length > 0) {
@@ -463,7 +463,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
   // @see printer.ts line 921
   private def _shouldPrintComment() = ???
 
-  private def _printComment(comment: BaseComment, skipNewLines: CommentSkipNewLine) = {
+  private def _printComment(comment: Comment, skipNewLines: CommentSkipNewLine) = {
     val isBlockComment = comment.kind == CommentKind.Block
     val printNewLines =
       isBlockComment && skipNewLines != CommentSkipNewLine.All && !_noLineTerminator
@@ -484,7 +484,7 @@ class Printer(format: Format, map: SourceMapBuilder) {
 
     if (endsWith('/')) _space()
 
-    source(LocationType.Start, comment.loc)
+    source(LocationType.Start, comment.location)
     _append(value, isBlockComment)
 
     if (!isBlockComment && !_noLineTerminator) newline(1, true)
@@ -494,9 +494,9 @@ class Printer(format: Format, map: SourceMapBuilder) {
 
   private def _printComments(
     ty: CommentType,
-    comments: Array[BaseComment],
-    node: BaseNode,
-    parent: Option[BaseNode] = None,
+    comments: Array[Comment],
+    node: Node,
+    parent: Option[Node] = None,
     lineOffset: Int = 0
   ) =
     // TODO: Finish print comments
@@ -506,9 +506,9 @@ class Printer(format: Format, map: SourceMapBuilder) {
 
 object Printer {
   def needsParens(
-    node: Option[BaseNode],
-    parent: Option[BaseNode],
-    printStack: Option[Array[BaseNode]]
+    node: Option[Node],
+    parent: Option[Node],
+    printStack: Option[Array[Node]]
   ): Boolean = if (parent.isEmpty) false
       else {
         // TODO: check node type
