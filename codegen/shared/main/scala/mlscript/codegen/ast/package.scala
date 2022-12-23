@@ -2,6 +2,7 @@
 package mlscript.codegen.ast
 
 import mlscript.codegen.{Position => SourcePosition, Location => SourceLocation}
+import scala.collection.mutable.{Map => MutMap}
 
 trait Located:
   val start: Option[Int]
@@ -43,7 +44,23 @@ abstract class Node extends Located:
   val end: Option[Int]
   val location: Option[SourceLocation]
   // val range: Option[(Int, Int)]
-  // val extra: Option[Map[String, Any]]
+  var extra: Option[MutMap[String, Any]] = None
+
+  def compact: Boolean =
+    extra match
+      case None => false
+      case Some(map) => map.get("compact") match
+        case Some(compact: Boolean) => compact
+        case _ => false
+
+  def compact_=(value: Boolean) =
+    (extra.getOrElse {
+      val m = MutMap.empty[String, Any]
+      extra = Some(m)
+      m
+    }) += ("compact" -> value)
+    
+    
 
 enum CommentType:
   case Leading

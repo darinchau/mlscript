@@ -22,3 +22,8 @@ package object generator:
     case All
     case Leading
     case Trailing
+
+  enum PrintCommentHint:
+    case Skip
+    case Allow
+    case Defer

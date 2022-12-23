@@ -2,6 +2,7 @@ package mlscript.codegen.generator
 
 import scala.collection.mutable.{StringBuilder, ArrayDeque}
 import mlscript.codegen.{Position, Location, LocationType}
+import mlscript.codegen.ast.Node
 
 private case class QueueItem(
   val char: Char,
@@ -17,7 +18,7 @@ class BufferOutput(
   val rawMappings: Option[Any] // TODO: Fill the right types after they're done.
 )
 
-class Buffer(map: Option[SourceMapBuilder]) {
+class Buffer(map: Option[SourceMapBuilder], printer: Printer) {
   private var position: Position = Position(1, 0)
 
   private var sourcePosition: SourcePosition = SourcePosition()
@@ -44,7 +45,7 @@ class Buffer(map: Option[SourceMapBuilder]) {
    */
   def get(): BufferOutput = {
     flush()
-    val code = buf.toString().trim // FIXME: TrimRight
+    val code = buf.toString().reverse.dropWhile(_.isWhitespace).reverse
     new BufferOutput(code, None, None, None)
   }
 
@@ -124,7 +125,7 @@ class Buffer(map: Option[SourceMapBuilder]) {
       // If the string starts with a newline char, then adding a mark is redundant.
       // This catches both "no newlines" and "newline after several chars".
       if (!str.startsWith("\n"))
-        mark(Some(sourcePosition.line.get), sourcePosition.column, sourcePosition.identifierName, sourcePosition.fileName)
+        mark(sourcePosition.line, sourcePosition.column, sourcePosition.identifierName, sourcePosition.fileName)
 
       str.split("\n").zipWithIndex.foreach((ls, i) => {
         position = position.nextLine
@@ -144,7 +145,9 @@ class Buffer(map: Option[SourceMapBuilder]) {
     column: Option[Int],
     identifierName: Option[String],
     fileName: Option[String]
-  ): Unit = ??? // TODO: Mark on Source Map
+  ): Unit = if (!map.isEmpty)
+      map.get.mark(position, Position(line.get, column.get),
+        fileName.getOrElse(""), identifierName)
 
   def removeTrailingNewline(): Unit =
     if (!revertableQueue.isEmpty && revertableQueue.last.char == '\n')
@@ -183,11 +186,11 @@ class Buffer(map: Option[SourceMapBuilder]) {
   def hasContent: Boolean =
     !revertableQueue.isEmpty || last != '\u0000'
 
-  def exactSource(loc: Option[Location], cb: () => Unit): Unit =
-    if (map.isEmpty) cb()
+  def exactSource(loc: Option[Location], node: Node, parent: Node, printer: Printer): Unit =
+    if (map.isEmpty) printer.print(parent)
     else {
       source(LocationType.Start, loc)
-      cb()
+      printer.print(parent)
       source(LocationType.End, loc)
     }
 
@@ -202,11 +205,11 @@ class Buffer(map: Option[SourceMapBuilder]) {
   ): Unit =
     if (!map.isEmpty) normalizePosition(prop, loc, lineOffset, columnOffset)
 
-  def withSource(prop: LocationType, loc: Option[Location], cb: () => Unit): Unit =
-    if (map.isEmpty) cb()
+  def withSource(prop: LocationType, loc: Option[Location], node: Node, parent: Node, printer: Printer): Unit =
+    if (map.isEmpty) printer.print(parent)
     else {
       source(prop, loc)
-      cb()
+      printer.print(parent)
     }
 
   private def normalizePosition(
