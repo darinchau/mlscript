@@ -75,7 +75,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     _noLineTerminator = false
   }
 
-  def rightBrace: Unit = {
+  def rightBrace(): Unit = {
     if (format.minified) buf.removeLastSemicolon()
     token("}")
   }
@@ -422,7 +422,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         case _ => None
       case None => None
 
-  def printJoin(nodes: Option[Array[Node]], parent: Node, opts: Printer.PrintJoinOptions): Unit =
+  def printJoin[T <: Node](nodes: Option[List[T]], parent: Node, opts: Printer.PrintJoinOptions): Unit =
     if (!nodes.isEmpty && nodes.get.length > 0) {
       if (!opts.indent.isEmpty) indent()
 
@@ -508,13 +508,13 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   def noIndentInneerCommentsHere(): Unit = _indentInnerComments = false
 
-  def printSequence(nodes: Array[Node], parent: Node, opts: PrintSequenceOptions): Unit = {
+  def printSequence[T <: Node](nodes: IterableOnce[T], parent: Node, opts: PrintSequenceOptions): Unit = {
     val newOpts = PrintSequenceOptions(Some(true), opts.indent,
       opts.trailingCommentsLineOffset, opts.nextNodeStartLine, opts.addNewlines)
     // printJoin(Some(nodes), parent, newOpts) TODO: type issue here
   }
 
-  def printList(items: Array[Node], parent: Node, opts: PrintListOptions): Unit = {
+  def printList(items: IterableOnce[Node], parent: Node, opts: PrintListOptions): Unit = {
     val newOpts = PrintListOptions(if (opts.separator.isEmpty) Some(Printer.commaSeparator) else opts.separator,
       opts.iterator, opts.statement, opts.indent)
     // printJoin(Some(items), parent, newOpts) TODO: type issue here

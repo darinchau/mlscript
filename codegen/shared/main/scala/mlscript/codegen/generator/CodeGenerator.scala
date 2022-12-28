@@ -1,13 +1,84 @@
 package mlscript.codegen.generator
 
+import mlscript.codegen.LocationType
 import mlscript.codegen.ast._
 
 class CodeGenerator(
   ast: Node,
   format: Format,
   sourceMap: SourceMapBuilder
-) extends Printer(format, sourceMap) {
-  override def print(node: Node) = node match {
+) extends Printer(format, sourceMap):
+
+  override def print(node: Node): Unit = node match
+    // BEGIN classes.ts
+    case node @ ClassDeclaration(id, superClass, body, decorators) =>
+      printJoin(decorators, node, ???)
+      if (node.declare.getOrElse(false)) {
+        word("declare")
+        space()
+      }
+      if (node.`abstract`.getOrElse(false)) {
+        word("abstract")
+        space()
+      }
+      word("class")
+      space()
+      print(Some(id), Some(node))
+      print(node.typeParameters, Some(node))
+      superClass.foreach { superClassExpr =>
+        space()
+        word("extends")
+        space()
+        print(superClass, Some(node))
+        print(node.superTypeParameters, Some(node))
+      }
+      node.implements.foreach { implements =>
+        space()
+        word("implements")
+        space()
+        printList(implements, node, ???)
+      }
+      space()
+      print(Some(node.body), Some(node))
+    case node @ ClassExpression(id, superClass, body, decorators) =>
+      // TODO: Extract common fields from `ClassDeclaration` and `ClassExpression`
+      // to `Class` and handle them 
+      ???
+    case node @ ClassBody(body) =>
+      token("{")
+      body match
+        case Nil => token("}")
+        case _ =>
+          newline()
+          indent()
+          printSequence(body, node, ???)
+          dedent()
+          if (!endsWith('\n')) newline()
+          sourceWithOffset(LocationType.End, node.location, 0, -1)
+          rightBrace()
+    case node @ ClassProperty(key, value, typeAnnotation, decorators, computed, static) =>
+      printJoin(decorators, node, ???)
+      node.key.location.flatMap(_.end.map(_.line)).foreach(catchUp)
+      // tsPrintClassMemberModifiers(node) // TODO: Not implemented yet
+      if (node.computed) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+      } else {
+        // _variance(node) // TODO: Not implemented yet
+        print(Some(key), Some(node))
+      }
+      if (node.optional.getOrElse(false)) token("?")
+      if (node.definite.getOrElse(false)) token("!")
+      print(typeAnnotation, Some(node))
+      value.foreach { _ =>
+        space()
+        token("=")
+        space()
+        print(value, Some(node))
+      }
+      semicolon()
+    // END classes.ts
     case ThisExpression() => word("this")
     case Super() => word("super")
     case Import() => word("import")
@@ -42,12 +113,11 @@ class CodeGenerator(
     case TSIntrinsicKeyword() => word("intrinsic")
     case TSThisType() => word("this")
     case _ => () // TODO
-  }
 
   def generate() = super.generate(ast)
-}
 
-object CodeGenerator {
+end CodeGenerator
+
+object CodeGenerator:
   def apply(ast: Node, format: Format, sourceMap: SourceMapBuilder) =
     new CodeGenerator(ast, format, sourceMap)
-}
