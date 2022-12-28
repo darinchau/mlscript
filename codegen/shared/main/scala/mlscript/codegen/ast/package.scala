@@ -59,8 +59,6 @@ abstract class Node extends Located:
       extra = Some(m)
       m
     }) += ("compact" -> value)
-    
-    
 
 enum CommentType:
   case Leading
@@ -315,8 +313,11 @@ trait TSBaseType
 case class ArrayExpression(val elements: List[Option[Expression | SpreadElement]] = Nil)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression
 
-case class AssignmentExpression(val operator: String, val left: LVal, val right: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with Standardized with Expression
+case class AssignmentExpression(
+  val operator: String,
+  val left: Node with LVal,
+  val right: Node with Expression
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression
 
 enum BinaryOperator:
   case Plus
@@ -345,8 +346,8 @@ enum BinaryOperator:
 
 case class BinaryExpression(
   val operator: BinaryOperator,
-  val left: Expression | PrivateName,
-  val right: Expression
+  val left: Node with Expression | PrivateName,
+  val right: Node with Expression
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Binary with Expression
 
 case class InterpreterDirective(val value: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -358,15 +359,17 @@ case class Directive(val value: DirectiveLiteral)(val start: Option[Int], val en
 case class DirectiveLiteral(val value: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized
 
-case class BlockStatement(val body: List[Statement], val directives: List[Directive] = Nil)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with Standardized with Scopable with BlockParent with Block with Statement
+case class BlockStatement(
+  val body: List[Node with Statement],
+  val directives: List[Directive] = Nil
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Scopable with BlockParent with Block with Statement
 
 case class BreakStatement(val label: Option[Identifier] = None)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement with Terminatorless with CompletionStatement
 
 case class CallExpression(
-  val callee: Expression | Super | V8IntrinsicIdentifier,
-  val arguments: List[Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder]
+  val callee: Node with Expression | Super | V8IntrinsicIdentifier,
+  val arguments: List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder]
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression:
   var optional: Option[Boolean] = None
   var typeArguments: Option[TypeParameterInstantiation] = None
@@ -378,9 +381,9 @@ case class CatchClause(
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Scopable with BlockParent
 
 case class ConditionalExpression(
-  val test: Expression,
-  val consequent: Expression,
-  val alternate: Expression
+  val test: Node with Expression,
+  val consequent: Node with Expression,
+  val alternate: Node with Expression
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression with Conditional
 
 case class ContinueStatement(val label: Option[Identifier] = None)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -389,13 +392,13 @@ case class ContinueStatement(val label: Option[Identifier] = None)(val start: Op
 case class DebuggerStatement()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement
 
-case class DoWhileStatement(val test: Expression, val body: Statement)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class DoWhileStatement(val test: Node with Expression, val body: Node with Statement)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement with BlockParent with Loop with While with Scopable
 
 case class EmptyStatement()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement
 
-case class ExpressionStatement(val expression: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ExpressionStatement(val expression: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement with ExpressionWrapper
 
 case class File(
@@ -405,21 +408,21 @@ case class File(
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized
 
 case class ForInStatement(
-  val left: VariableDeclaration | LVal,
-  val right: Expression,
-  val body: Statement
+  val left: VariableDeclaration | Node with LVal,
+  val right: Node with Expression,
+  val body: Node with Statement
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Scopable with Statement with For with BlockParent with Loop with ForXStatement
 
 case class ForStatement(
-  val init: Option[VariableDeclaration | Expression] = None,
-  val test: Option[Expression] = None,
-  val update: Option[Expression] = None,
-  val body: Statement
+  val init: Option[VariableDeclaration | Node with Expression] = None,
+  val test: Option[Node with Expression] = None,
+  val update: Option[Node with Expression] = None,
+  val body: Node with Statement
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Scopable with Statement with For with BlockParent with Loop
 
 case class FunctionDeclaration(
   val id: Option[Identifier] = None,
-  val params: List[Identifier | Pattern | RestElement],
+  val params: List[Identifier | Node with Pattern | RestElement],
   val body: BlockStatement,
   val generator: Boolean = false,
   val async: Boolean = false
@@ -431,7 +434,7 @@ case class FunctionDeclaration(
 
 case class FunctionExpression(
   val id: Option[Identifier] = None,
-  val params: List[Identifier | Pattern | RestElement],
+  val params: List[Identifier | Node with Pattern | RestElement],
   val body: BlockStatement,
   val generator: Boolean = false,
   val async: Boolean = false
@@ -447,12 +450,12 @@ case class Identifier(val name: String)(val start: Option[Int], val end: Option[
   var typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None
 
 case class IfStatement(
-  val test: Expression,
-  val consequent: Statement,
-  val alternate: Option[Statement] = None
+  val test: Node with Expression,
+  val consequent: Node with Statement,
+  val alternate: Option[Node with Statement] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Statement with Conditional
 
-case class LabeledStatement(val label: Identifier, val body: Statement)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class LabeledStatement(val label: Identifier, val body: Node with Statement)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement
 
 case class StringLiteral(val value: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -477,20 +480,20 @@ enum LogicalOperator:
 
 case class LogicalExpression(
   val operator: LogicalOperator,
-  val left: Expression,
-  val right: Expression
+  val left: Node with Expression,
+  val right: Node with Expression
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Binary with Expression
 
 case class MemberExpression(
-  val `object`: Expression | Super,
-  val property: Expression | Identifier | PrivateName,
+  val `object`: Node with Expression | Super,
+  val property: Node with Expression | Identifier | PrivateName,
   val computed: Boolean = false,
   val optional: Option[Boolean] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression with LVal
 
 case class NewExpression(
-  val callee: Expression | Super | V8IntrinsicIdentifier,
-  val arguments: List[Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder]
+  val callee: Node with Expression | Super | V8IntrinsicIdentifier,
+  val arguments: List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder]
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression:
   var optional: Option[Boolean] = None
   var typeArguments: Option[TypeParameterInstantiation] = None
@@ -501,7 +504,7 @@ enum SourceType:
   case Module
 
 case class Program(
-  val body: List[Statement],
+  val body: List[Node with Statement],
   val directives: List[Directive] = Nil,
   val sourceType: SourceType = SourceType.Script,
   val interpreter: Option[InterpreterDirective] = None,
@@ -518,8 +521,8 @@ enum ObjectMethodKind:
 
 case class ObjectMethod(
   val kind: Option[ObjectMethodKind] = Some(ObjectMethodKind.Method),
-  val key: Expression | Identifier | StringLiteral | NumericLiteral | BigIntLiteral,
-  val params: List[Identifier | Pattern | RestElement],
+  val key: Node with Expression | Identifier | StringLiteral | NumericLiteral | BigIntLiteral,
+  val params: List[Identifier | Node with Pattern | RestElement],
   val body: BlockStatement,
   val computed: Boolean = false,
   val generator: Boolean = false,
@@ -530,38 +533,40 @@ case class ObjectMethod(
   var typeParameters: Option[TypeParameterDeclaration | TSTypeParameterDeclaration | Noop] = None
 
 case class ObjectProperty(
-  val key: Expression | Identifier | StringLiteral | NumericLiteral | BigIntLiteral | DecimalLiteral | PrivateName,
-  val value: Expression | PatternLike,
+  val key: Node with Expression | Identifier | StringLiteral | NumericLiteral | BigIntLiteral | DecimalLiteral | PrivateName,
+  val value: Node with Expression | Node with PatternLike,
   val computed: Boolean = false,
   val shorthand: Boolean = false,
   val decorators: Option[List[Decorator]] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with UserWhitespacable with Property with ObjectMember
 
-case class RestElement(val argument: LVal)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class RestElement(val argument: Node with LVal)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with LVal with PatternLike:
   var decorators: Option[List[Decorator]] = None
   var optional: Option[Boolean] = None
   var typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None
 
-case class ReturnStatement(val argument: Option[Expression] = None)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ReturnStatement(val argument: Option[Node with Expression] = None)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement with Terminatorless with CompletionStatement
 
-case class SequenceExpression(val expressions: List[Expression])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class SequenceExpression(val expressions: List[Node with Expression])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression
 
-case class ParenthesizedExpression(val expression: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ParenthesizedExpression(val expression: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression with ExpressionWrapper
 
-case class SwitchCase(val test: Option[Expression] = None, val consequent: List[Statement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with Standardized
+case class SwitchCase(
+  val test: Option[Node with Expression] = None,
+  val consequent: List[Node with Statement]
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized
 
-case class SwitchStatement(val discriminant: Expression, val cases: List[SwitchCase])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class SwitchStatement(val discriminant: Node with Expression, val cases: List[SwitchCase])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement with BlockParent with Scopable
 
 case class ThisExpression()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression
 
-case class ThrowStatement(val argument: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ThrowStatement(val argument: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement with Terminatorless with CompletionStatement
 
 case class TryStatement(
@@ -581,7 +586,7 @@ enum UnaryOperator:
 
 case class UnaryExpression(
   val operator: UnaryOperator,
-  val argument: Expression,
+  val argument: Node with Expression,
   val prefix: Boolean = true
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with UnaryLike with Expression
 
@@ -591,7 +596,7 @@ enum UpdateOperator:
 
 case class UpdateExpression(
   val operator: UpdateOperator,
-  val argument: Expression,
+  val argument: Node with Expression,
   val prefix: Boolean = false
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression
 
@@ -607,19 +612,19 @@ case class VariableDeclaration(
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Statement with Declaration:
   var declare: Option[Boolean] = None
 
-case class VariableDeclarator(val id: LVal, val init: Option[Expression] = None)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class VariableDeclarator(val id: Node with LVal, val init: Option[Node with Expression] = None)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized:
   var definite: Option[Boolean] = None
 
-case class WhileStatement(val test: Expression, val body: Statement)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class WhileStatement(val test: Node with Expression, val body: Node with Statement)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement with BlockParent with Loop with While with Scopable
 
-case class WithStatement(val `object`: Expression, val body: Statement)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class WithStatement(val `object`: Node with Expression, val body: Node with Statement)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Statement
 
 case class AssignmentPattern(
   val left: Identifier | ObjectPattern | ArrayPattern | MemberExpression | TSAsExpression | TSSatisfiesExpression | TSTypeAssertion | TSNonNullExpression,
-  val right: Expression
+  val right: Node with Expression
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Pattern with PatternLike with LVal:
   var decorators: Option[List[Decorator]] = None
   var typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None
@@ -631,8 +636,8 @@ case class ArrayPattern(val elements: List[Option[PatternLike | LVal]])(val star
   var typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None
 
 case class ArrowFunctionExpression(
-  val params: List[Identifier | Pattern | RestElement],
-  val body: BlockStatement | Expression,
+  val params: List[Identifier | Node with Pattern | RestElement],
+  val body: BlockStatement | Node with Expression,
   val async: Boolean = false,
   val expression: Boolean
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Scopable with Function with BlockParent with FunctionParent with Expression with Pureish:
@@ -647,7 +652,7 @@ case class ClassBody(
 
 case class ClassExpression(
   val id: Option[Identifier] = None,
-  val superClass: Option[Expression] = None,
+  val superClass: Option[Node with Expression] = None,
   val body: ClassBody,
   val decorators: Option[List[Decorator]] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Scopable with Class with Expression:
@@ -658,7 +663,7 @@ case class ClassExpression(
 
 case class ClassDeclaration(
   val id: Identifier,
-  val superClass: Option[Expression] = None,
+  val superClass: Option[Node with Expression] = None,
   val body: ClassBody,
   val decorators: Option[List[Decorator]] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Scopable with Class with Statement with Declaration:
@@ -679,12 +684,12 @@ case class ExportAllDeclaration(val source: StringLiteral)(val start: Option[Int
   var exportKind: Option[ExportKind] = None
 
 case class ExportDefaultDeclaration(
-  val declaration: TSDeclareFunction | FunctionDeclaration | ClassDeclaration | Expression
+  val declaration: TSDeclareFunction | FunctionDeclaration | ClassDeclaration | Node with Expression
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Statement with Declaration with ModuleDeclaration with ExportDeclaration:
   var exportKind: Option["value"] = None
 
 case class ExportNamedDeclaration(
-  val declaration: Option[Declaration] = None,
+  val declaration: Option[Node with Declaration] = None,
   val specifiers: List[ExportSpecifier | ExportDefaultSpecifier | ExportNamespaceSpecifier] = Nil,
   val source: Option[StringLiteral] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Statement with Declaration with ModuleDeclaration with ExportDeclaration:
@@ -696,9 +701,9 @@ case class ExportSpecifier(val local: Identifier, val exported: Identifier | Str
   var exportKind: Option[ExportKind] = None
 
 case class ForOfStatement(
-  val left: VariableDeclaration | LVal,
-  val right: Expression,
-  val body: Statement,
+  val left: VariableDeclaration | Node with LVal,
+  val right: Node with Expression,
+  val body: Node with Statement,
   val await: Boolean = false
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Scopable with Statement with For with BlockParent with Loop with ForXStatement
 
@@ -741,8 +746,8 @@ enum ClassMethodKind:
 
 case class ClassMethod(
   val kind: Option[ClassMethodKind] = Some(ClassMethodKind.Method),
-  val key: Identifier | StringLiteral | NumericLiteral | BigIntLiteral | Expression,
-  val params: List[Identifier | Pattern | RestElement | TSParameterProperty],
+  val key: Identifier | StringLiteral | NumericLiteral | BigIntLiteral | Node with Expression,
+  val params: List[Identifier | Node with Pattern | RestElement | TSParameterProperty],
   val body: BlockStatement,
   val computed: Boolean = false,
   val static: Boolean = false,
@@ -763,13 +768,13 @@ case class ObjectPattern(val properties: List[RestElement | ObjectProperty])(val
   var decorators: Option[List[Decorator]] = None
   var typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None
 
-case class SpreadElement(val argument: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class SpreadElement(val argument: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with UnaryLike
 
 case class Super()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression
 
-case class TaggedTemplateExpression(val tag: Expression, val quasi: TemplateLiteral)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TaggedTemplateExpression(val tag: Node with Expression, val quasi: TemplateLiteral)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression:
   var typeParameters: Option[TypeParameterInstantiation | TSTypeParameterInstantiation] = None
 
@@ -778,13 +783,15 @@ case class TemplateElement(val value: Any, val tail: Boolean = false)(val start:
 
 case class TemplateLiteral(
   val quasis: List[TemplateElement],
-  val expressions: List[Expression | TSType]
+  val expressions: List[Node with Expression | Node with TSType]
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression with Literal
 
-case class YieldExpression(val argument: Option[Expression] = None, val delegate: Boolean = false)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with Standardized with Expression with Terminatorless
+case class YieldExpression(
+  val argument: Option[Node with Expression] = None,
+  val delegate: Boolean = false
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression with Terminatorless
 
-case class AwaitExpression(val argument: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class AwaitExpression(val argument: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression with Terminatorless
 
 case class Import()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -797,23 +804,23 @@ case class ExportNamespaceSpecifier(val exported: Identifier)(val start: Option[
     extends Node with Standardized with ModuleSpecifier
 
 case class OptionalMemberExpression(
-  val `object`: Expression,
-  val property: Expression | Identifier,
+  val `object`: Node with Expression,
+  val property: Node with Expression | Identifier,
   val computed: Option[Boolean] = Some(false),
   val optional: Boolean
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression
 
 case class OptionalCallExpression(
-  val callee: Expression,
-  val arguments: List[Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder],
+  val callee: Node with Expression,
+  val arguments: List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder],
   val optional: Boolean
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Expression:
   var typeArguments: Option[TypeParameterInstantiation] = None
   var typeParameters: Option[TSTypeParameterInstantiation] = None
 
 case class ClassProperty(
-  val key: Identifier | StringLiteral | NumericLiteral | BigIntLiteral | Expression,
-  val value: Option[Expression] = None,
+  val key: Identifier | StringLiteral | NumericLiteral | BigIntLiteral | Node with Expression,
+  val value: Option[Node with Expression] = None,
   val typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None,
   val decorators: Option[List[Decorator]] = None,
   val computed: Boolean = false,
@@ -829,8 +836,8 @@ case class ClassProperty(
   var variance: Option[Variance] = None
 
 case class ClassAccessorProperty(
-  val key: Identifier | StringLiteral | NumericLiteral | BigIntLiteral | Expression | PrivateName,
-  val value: Option[Expression] = None,
+  val key: Identifier | StringLiteral | NumericLiteral | BigIntLiteral | Node with Expression | PrivateName,
+  val value: Option[Node with Expression] = None,
   val typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None,
   val decorators: Option[List[Decorator]] = None,
   val computed: Boolean = false,
@@ -847,7 +854,7 @@ case class ClassAccessorProperty(
 
 case class ClassPrivateProperty(
   val key: PrivateName,
-  val value: Option[Expression] = None,
+  val value: Option[Node with Expression] = None,
   val decorators: Option[List[Decorator]] = None,
   val static: Boolean = false
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Property with Private:
@@ -864,7 +871,7 @@ enum ClassPrivateMethodKind:
 case class ClassPrivateMethod(
   val kind: Option[ClassPrivateMethodKind] = Some(ClassPrivateMethodKind.Method),
   val key: PrivateName,
-  val params: List[Identifier | Pattern | RestElement | TSParameterProperty],
+  val params: List[Identifier | Node with Pattern | RestElement | TSParameterProperty],
   val body: BlockStatement,
   val static: Boolean = false
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Standardized with Function with Scopable with BlockParent with FunctionParent with Method with Private:
@@ -883,13 +890,13 @@ case class ClassPrivateMethod(
 case class PrivateName(val id: Identifier)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Private
 
-case class StaticBlock(val body: List[Statement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class StaticBlock(val body: List[Node with Statement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Scopable with BlockParent with FunctionParent
 
 case class AnyTypeAnnotation()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType with FlowBaseAnnotation
 
-case class ArrayTypeAnnotation(val elementType: FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ArrayTypeAnnotation(val elementType: Node with FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType
 
 case class BooleanTypeAnnotation()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -944,21 +951,21 @@ case class DeclareModuleExports(val typeAnnotation: TypeAnnotation)(val start: O
 case class DeclareTypeAlias(
   val id: Identifier,
   val typeParameters: Option[TypeParameterDeclaration] = None,
-  val right: FlowType
+  val right: Node with FlowType
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with FlowDeclaration with Statement with Declaration
 
 case class DeclareOpaqueType(
   val id: Identifier,
   val typeParameters: Option[TypeParameterDeclaration] = None,
-  val supertype: Option[FlowType] = None
+  val supertype: Option[Node with FlowType] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with FlowDeclaration with Statement with Declaration:
-  var impltype: Option[FlowType] = None
+  var impltype: Option[Node with FlowType] = None
 
 case class DeclareVariable(val id: Identifier)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowDeclaration with Statement with Declaration
 
 case class DeclareExportDeclaration(
-  val declaration: Option[Flow] = None,
+  val declaration: Option[Node with Flow] = None,
   val specifiers: Option[List[ExportSpecifier | ExportNamespaceSpecifier]] = None,
   val source: Option[StringLiteral] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with FlowDeclaration with Statement with Declaration:
@@ -968,7 +975,7 @@ case class DeclareExportAllDeclaration(val source: StringLiteral)(val start: Opt
     extends Node with Flow with FlowDeclaration with Statement with Declaration:
   var exportKind: Option[ExportKind] = None
 
-case class DeclaredPredicate(val value: Flow)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class DeclaredPredicate(val value: Node with Flow)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowPredicate
 
 case class ExistsTypeAnnotation()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -978,12 +985,14 @@ case class FunctionTypeAnnotation(
   val typeParameters: Option[TypeParameterDeclaration] = None,
   val params: List[FunctionTypeParam],
   val rest: Option[FunctionTypeParam] = None,
-  val returnType: FlowType
+  val returnType: Node with FlowType
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with FlowType:
   var `this`: Option[FunctionTypeParam] = None
 
-case class FunctionTypeParam(val name: Option[Identifier] = None, val typeAnnotation: FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with Flow:
+case class FunctionTypeParam(
+  val name: Option[Identifier] = None,
+  val typeAnnotation: Node with FlowType
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow:
   var optional: Option[Boolean] = None
 
 case class GenericTypeAnnotation(
@@ -1013,7 +1022,7 @@ case class InterfaceTypeAnnotation(
   val body: ObjectTypeAnnotation
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with FlowType
 
-case class IntersectionTypeAnnotation(val types: List[FlowType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class IntersectionTypeAnnotation(val types: List[Node with FlowType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType
 
 case class MixedTypeAnnotation()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -1022,7 +1031,7 @@ case class MixedTypeAnnotation()(val start: Option[Int], val end: Option[Int], v
 case class EmptyTypeAnnotation()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType with FlowBaseAnnotation
 
-case class NullableTypeAnnotation(val typeAnnotation: FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class NullableTypeAnnotation(val typeAnnotation: Node with FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType
 
 case class NumberLiteralTypeAnnotation(val value: Int)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -1042,19 +1051,19 @@ case class ObjectTypeAnnotation(
 
 case class ObjectTypeInternalSlot(
   val id: Identifier,
-  val value: FlowType,
+  val value: Node with FlowType,
   val optional: Boolean,
   val static: Boolean,
   val method: Boolean
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with UserWhitespacable
 
-case class ObjectTypeCallProperty(val value: FlowType, val static: Boolean)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ObjectTypeCallProperty(val value: Node with FlowType, val static: Boolean)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with UserWhitespacable
 
 case class ObjectTypeIndexer(
   val id: Option[Identifier] = None,
-  val key: FlowType,
-  val value: FlowType,
+  val key: Node with FlowType,
+  val value: Node with FlowType,
   val variance: Option[Variance] = None,
   val static: Boolean
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with UserWhitespacable
@@ -1066,7 +1075,7 @@ enum ObjectTypePropertyKind:
 
 case class ObjectTypeProperty(
   val key: Identifier | StringLiteral,
-  val value: FlowType,
+  val value: Node with FlowType,
   val variance: Option[Variance] = None,
   val kind: ObjectTypePropertyKind,
   val method: Boolean,
@@ -1075,14 +1084,14 @@ case class ObjectTypeProperty(
   val static: Boolean
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with UserWhitespacable
 
-case class ObjectTypeSpreadProperty(val argument: FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ObjectTypeSpreadProperty(val argument: Node with FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with UserWhitespacable
 
 case class OpaqueType(
   val id: Identifier,
   val typeParameters: Option[TypeParameterDeclaration] = None,
-  val supertype: Option[FlowType] = None,
-  val impltype: FlowType
+  val supertype: Option[Node with FlowType] = None,
+  val impltype: Node with FlowType
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with FlowDeclaration with Statement with Declaration
 
 case class QualifiedTypeIdentifier(
@@ -1102,27 +1111,29 @@ case class SymbolTypeAnnotation()(val start: Option[Int], val end: Option[Int], 
 case class ThisTypeAnnotation()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType with FlowBaseAnnotation
 
-case class TupleTypeAnnotation(val types: List[FlowType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TupleTypeAnnotation(val types: List[Node with FlowType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType
 
-case class TypeofTypeAnnotation(val argument: FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TypeofTypeAnnotation(val argument: Node with FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType
 
 case class TypeAlias(
   val id: Identifier,
   val typeParameters: Option[TypeParameterDeclaration] = None,
-  val right: FlowType
+  val right: Node with FlowType
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with FlowDeclaration with Statement with Declaration
 
-case class TypeAnnotation(val typeAnnotation: FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TypeAnnotation(val typeAnnotation: Node with FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow
 
-case class TypeCastExpression(val expression: Expression, val typeAnnotation: TypeAnnotation)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with Flow with ExpressionWrapper with Expression
+case class TypeCastExpression(
+  val expression: Node with Expression,
+  val typeAnnotation: TypeAnnotation
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with ExpressionWrapper with Expression
 
 case class TypeParameter(
   val bound: Option[TypeAnnotation] = None,
-  val default: Option[FlowType] = None,
+  val default: Option[Node with FlowType] = None,
   val variance: Option[Variance] = None,
   val name: String
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow
@@ -1130,10 +1141,10 @@ case class TypeParameter(
 case class TypeParameterDeclaration(val params: List[TypeParameter])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow
 
-case class TypeParameterInstantiation(val params: List[FlowType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TypeParameterInstantiation(val params: List[Node with FlowType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow
 
-case class UnionTypeAnnotation(val types: List[FlowType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class UnionTypeAnnotation(val types: List[Node with FlowType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType
 
 enum VarianceKind:
@@ -1184,12 +1195,12 @@ case class EnumStringMember(val id: Identifier, val init: StringLiteral)(val sta
 case class EnumDefaultedMember(val id: Identifier)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with EnumMember
 
-case class IndexedAccessType(val objectType: FlowType, val indexType: FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class IndexedAccessType(val objectType: Node with FlowType, val indexType: Node with FlowType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Flow with FlowType
 
 case class OptionalIndexedAccessType(
-  val objectType: FlowType,
-  val indexType: FlowType,
+  val objectType: Node with FlowType,
+  val indexType: Node with FlowType,
   val optional: Boolean
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with Flow with FlowType
 
@@ -1211,10 +1222,10 @@ case class JSXElement(
 case class JSXEmptyExpression()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with JSX
 
-case class JSXExpressionContainer(val expression: Expression | JSXEmptyExpression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class JSXExpressionContainer(val expression: Node with Expression | JSXEmptyExpression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with JSX with Immutable
 
-case class JSXSpreadChild(val expression: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class JSXSpreadChild(val expression: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with JSX with Immutable
 
 case class JSXIdentifier(val name: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -1235,7 +1246,7 @@ case class JSXOpeningElement(
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with JSX with Immutable:
   var typeParameters: Option[TypeParameterInstantiation | TSTypeParameterInstantiation] = None
 
-case class JSXSpreadAttribute(val argument: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class JSXSpreadAttribute(val argument: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with JSX
 
 case class JSXText(val value: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -1275,13 +1286,13 @@ case class V8IntrinsicIdentifier(val name: String)(val start: Option[Int], val e
 case class ArgumentPlaceholder()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node
 
-case class BindExpression(val `object`: Expression, val callee: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class BindExpression(val `object`: Node with Expression, val callee: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Expression
 
 case class ImportAttribute(val key: Identifier | StringLiteral, val value: StringLiteral)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node
 
-case class Decorator(val expression: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class Decorator(val expression: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node
 
 case class DoExpression(val body: BlockStatement, val async: Boolean = false)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -1293,7 +1304,7 @@ case class ExportDefaultSpecifier(val exported: Identifier)(val start: Option[In
 case class RecordExpression(val properties: List[ObjectProperty | SpreadElement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Expression
 
-case class TupleExpression(val elements: List[Expression | SpreadElement] = Nil)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TupleExpression(val elements: List[Node with Expression | SpreadElement] = Nil)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Expression
 
 case class DecimalLiteral(val value: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -1305,10 +1316,10 @@ case class ModuleExpression(val body: Program)(val start: Option[Int], val end: 
 case class TopicReference()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Expression
 
-case class PipelineTopicExpression(val expression: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class PipelineTopicExpression(val expression: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Expression
 
-case class PipelineBareFunction(val callee: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class PipelineBareFunction(val callee: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Expression
 
 case class PipelinePrimaryTopicReference()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -1324,7 +1335,7 @@ case class TSParameterProperty(val parameter: Identifier | AssignmentPattern)(va
 case class TSDeclareFunction(
   val id: Option[Identifier] = None,
   val typeParameters: Option[TSTypeParameterDeclaration | Noop] = None,
-  val params: List[Identifier | Pattern | RestElement],
+  val params: List[Identifier | Node with Pattern | RestElement],
   val returnType: Option[TSTypeAnnotation | Noop] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with Statement with Declaration:
   var async: Option[Boolean] = None
@@ -1339,9 +1350,9 @@ enum TSDeclareMethodKind:
 
 case class TSDeclareMethod(
   val decorators: Option[List[Decorator]] = None,
-  val key: Identifier | StringLiteral | NumericLiteral | BigIntLiteral | Expression,
+  val key: Identifier | StringLiteral | NumericLiteral | BigIntLiteral | Node with Expression,
   val typeParameters: Option[TSTypeParameterDeclaration | Noop] = None,
-  val params: List[Identifier | Pattern | RestElement | TSParameterProperty],
+  val params: List[Identifier | Node with Pattern | RestElement | TSParameterProperty],
   val returnType: Option[TSTypeAnnotation | Noop] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript:
   var `abstract`: Option[Boolean] = None
@@ -1355,7 +1366,7 @@ case class TSDeclareMethod(
   var `override`: Option[Boolean] = None
   var static: Option[Boolean] = None
 
-case class TSQualifiedName(val left: TSEntityName, val right: Identifier)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSQualifiedName(val left: Node with TSEntityName, val right: Identifier)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSEntityName
 
 case class TSCallSignatureDeclaration(
@@ -1375,9 +1386,9 @@ enum TSPropertySignatureKind:
   case Setter
 
 case class TSPropertySignature(
-  val key: Expression,
+  val key: Node with Expression,
   val typeAnnotation: Option[TSTypeAnnotation] = None,
-  val initializer: Option[Expression] = None,
+  val initializer: Option[Node with Expression] = None,
   val kind: TSPropertySignatureKind
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSTypeElement:
   var computed: Option[Boolean] = None
@@ -1390,7 +1401,7 @@ enum TSMethodSignatureKind:
   case Setter
 
 case class TSMethodSignature(
-  val key: Expression,
+  val key: Node with Expression,
   val typeParameters: Option[TSTypeParameterDeclaration] = None,
   val parameters: List[Identifier | RestElement],
   val typeAnnotation: Option[TSTypeAnnotation] = None,
@@ -1462,7 +1473,7 @@ case class TSConstructorType(
   var `abstract`: Option[Boolean] = None
 
 case class TSTypeReference(
-  val typeName: TSEntityName,
+  val typeName: Node with TSEntityName,
   val typeParameters: Option[TSTypeParameterInstantiation] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSType
 
@@ -1473,60 +1484,60 @@ case class TSTypePredicate(
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSType
 
 case class TSTypeQuery(
-  val exprName: TSEntityName | TSImportType,
+  val exprName: Node with TSEntityName | TSImportType,
   val typeParameters: Option[TSTypeParameterInstantiation] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSType
 
-case class TSTypeLiteral(val members: List[TSTypeElement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSTypeLiteral(val members: List[Node with TSTypeElement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
-case class TSArrayType(val elementType: TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSArrayType(val elementType: Node with TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
-case class TSTupleType(val elementTypes: List[TSType | TSNamedTupleMember])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSTupleType(val elementTypes: List[Node with TSType | TSNamedTupleMember])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
-case class TSOptionalType(val typeAnnotation: TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSOptionalType(val typeAnnotation: Node with TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
-case class TSRestType(val typeAnnotation: TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSRestType(val typeAnnotation: Node with TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
 case class TSNamedTupleMember(
   val label: Identifier,
-  val elementType: TSType,
+  val elementType: Node with TSType,
   val optional: Boolean = false
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript
 
-case class TSUnionType(val types: List[TSType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSUnionType(val types: List[Node with TSType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
-case class TSIntersectionType(val types: List[TSType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSIntersectionType(val types: List[Node with TSType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
 case class TSConditionalType(
-  val checkType: TSType,
-  val extendsType: TSType,
-  val trueType: TSType,
-  val falseType: TSType
+  val checkType: Node with TSType,
+  val extendsType: Node with TSType,
+  val trueType: Node with TSType,
+  val falseType: Node with TSType
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSType
 
 case class TSInferType(val typeParameter: TSTypeParameter)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
-case class TSParenthesizedType(val typeAnnotation: TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSParenthesizedType(val typeAnnotation: Node with TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
-case class TSTypeOperator(val typeAnnotation: TSType, val operator: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSTypeOperator(val typeAnnotation: Node with TSType, val operator: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
-case class TSIndexedAccessType(val objectType: TSType, val indexType: TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSIndexedAccessType(val objectType: Node with TSType, val indexType: Node with TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with TSType
 
 case class TSMappedType(
   val typeParameter: TSTypeParameter,
-  val typeAnnotation: Option[TSType] = None,
-  val nameType: Option[TSType] = None
+  val typeAnnotation: Option[Node with TSType] = None,
+  val nameType: Option[Node with TSType] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSType:
   var optional: Option[true | false | "+" | "-"] = None
   var readonly: Option[true | false | "+" | "-"] = None
@@ -1536,7 +1547,7 @@ case class TSLiteralType(
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSType with TSBaseType
 
 case class TSExpressionWithTypeArguments(
-  val expression: TSEntityName,
+  val expression: Node with TSEntityName,
   val typeParameters: Option[TSTypeParameterInstantiation] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSType
 
@@ -1548,39 +1559,45 @@ case class TSInterfaceDeclaration(
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with Statement with Declaration:
   var declare: Option[Boolean] = None
 
-case class TSInterfaceBody(val body: List[TSTypeElement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSInterfaceBody(val body: List[Node with TSTypeElement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript
 
 case class TSTypeAliasDeclaration(
   val id: Identifier,
   val typeParameters: Option[TSTypeParameterDeclaration] = None,
-  val typeAnnotation: TSType
+  val typeAnnotation: Node with TSType
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with Statement with Declaration:
   var declare: Option[Boolean] = None
 
 case class TSInstantiationExpression(
-  val expression: Expression,
+  val expression: Node with Expression,
   val typeParameters: Option[TSTypeParameterInstantiation] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with Expression
 
-case class TSAsExpression(val expression: Expression, val typeAnnotation: TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with TypeScript with Expression with LVal with PatternLike
+case class TSAsExpression(
+  val expression: Node with Expression,
+  val typeAnnotation: Node with TSType
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with Expression with LVal with PatternLike
 
-case class TSSatisfiesExpression(val expression: Expression, val typeAnnotation: TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with TypeScript with Expression with LVal with PatternLike
+case class TSSatisfiesExpression(
+  val expression: Node with Expression,
+  val typeAnnotation: Node with TSType
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with Expression with LVal with PatternLike
 
-case class TSTypeAssertion(val typeAnnotation: TSType, val expression: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
-    extends Node with TypeScript with Expression with LVal with PatternLike
+case class TSTypeAssertion(
+  val typeAnnotation: Node with TSType,
+  val expression: Node with Expression
+)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with Expression with LVal with PatternLike
 
 case class TSEnumDeclaration(val id: Identifier, val members: List[TSEnumMember])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with Statement with Declaration:
   var const: Option[Boolean] = None
   var declare: Option[Boolean] = None
-  var initializer: Option[Expression] = None
+  var initializer: Option[Node with Expression] = None
 
 case class TSEnumMember(
   val id: Identifier | StringLiteral,
-  val initializer: Option[Expression] = None
+  val initializer: Option[Node with Expression] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript
 
 case class TSModuleDeclaration(
@@ -1590,12 +1607,12 @@ case class TSModuleDeclaration(
   var declare: Option[Boolean] = None
   var global: Option[Boolean] = None
 
-case class TSModuleBlock(val body: List[Statement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSModuleBlock(val body: List[Node with Statement])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with Scopable with Block with BlockParent with FunctionParent
 
 case class TSImportType(
   val argument: StringLiteral,
-  val qualifier: Option[TSEntityName] = None,
+  val qualifier: Option[Node with TSEntityName] = None,
   val typeParameters: Option[TSTypeParameterInstantiation] = None
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with TSType
 
@@ -1605,7 +1622,7 @@ enum TSImportEqualsDeclarationKind:
 
 case class TSImportEqualsDeclaration(
   val id: Identifier,
-  val moduleReference: TSEntityName | TSExternalModuleReference,
+  val moduleReference: Node with TSEntityName | TSExternalModuleReference,
   val isExport: Boolean
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript with Statement:
   var importKind: Option[TSImportEqualsDeclarationKind] = None
@@ -1613,27 +1630,27 @@ case class TSImportEqualsDeclaration(
 case class TSExternalModuleReference(val expression: StringLiteral)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript
 
-case class TSNonNullExpression(val expression: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSNonNullExpression(val expression: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with Expression with LVal with PatternLike
 
-case class TSExportAssignment(val expression: Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSExportAssignment(val expression: Node with Expression)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with Statement
 
 case class TSNamespaceExportDeclaration(val id: Identifier)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript with Statement
 
-case class TSTypeAnnotation(val typeAnnotation: TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSTypeAnnotation(val typeAnnotation: Node with TSType)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript
 
-case class TSTypeParameterInstantiation(val params: List[TSType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class TSTypeParameterInstantiation(val params: List[Node with TSType])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript
 
 case class TSTypeParameterDeclaration(val params: List[TSTypeParameter])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with TypeScript
 
 case class TSTypeParameter(
-  val constraint: Option[TSType] = None,
-  val default: Option[TSType] = None,
+  val constraint: Option[Node with TSType] = None,
+  val default: Option[Node with TSType] = None,
   val name: String
 )(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation]) extends Node with TypeScript:
   var in: Option[Boolean] = None
