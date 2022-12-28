@@ -51,6 +51,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private var _printedComments = new HashSet[Comment]()
   private var _insideAux = false
   private var _lastCommentLine = 0
+  protected var inForStatementInitCounter = 0
 
   def print(node: Node): Unit
 
