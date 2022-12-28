@@ -494,7 +494,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   def printInnerComments(): Unit = {
     val node = _printStack.last
     val comments = node.innerComments
-    if (!comments.isEmpty & comments.get.length > 0) {
+    if (comments.isDefined && comments.get.length > 0) {
       val hasSpace = endsWith(' ')
       val printedCommentsCount = _printedComments.size
       if (_indentInnerComments) indent()

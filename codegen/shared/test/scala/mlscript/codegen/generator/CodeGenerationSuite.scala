@@ -18,6 +18,15 @@ class CodeGenerationSuite extends munit.FunSuite:
 
   private val sourceMap = new SourceMapBuilder(None, None, Left(""))
 
+  test("Code Generation - Base") {
+    {
+      val res = CodeGenerator(InterpreterDirective("foo")(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "#!foo")
+    }
+  }
+  test("Code Generation - Classes") {
+    
+  }
   test("Code Generation - Expression") {
     {
       val res = CodeGenerator(ThisExpression()(None, None, None), format, sourceMap).generate()
@@ -33,12 +42,20 @@ class CodeGenerationSuite extends munit.FunSuite:
       val res = CodeGenerator(ExistsTypeAnnotation()(None, None, None), format, sourceMap).generate()
       assertEquals(res.code, "*")
     }
+    {
+      val res = CodeGenerator(BooleanLiteralTypeAnnotation(true)(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "true")
+    }
+    {
+      val res = CodeGenerator(InferredPredicate()(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "%checks")
+    }
   }
   test("Code Generation - JSX") {
-    // {
-    //   val res = CodeGenerator(JSXClosingElement(JSXIdentifier("foo")(None, None, None))(None, None, None), format, sourceMap).generate()
-    //   assertEquals(res.code, "</>")
-    // }
+    {
+      val res = CodeGenerator(JSXClosingFragment()(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "</>")
+    }
   }
   test("Code Generation - Statement") {
     {
