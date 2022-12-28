@@ -119,9 +119,13 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     val lastChar = getLastChar()
     val strFirst = str.charAt(0)
     
+    // space is mandatory to avoid outputting <!--
+    // http://javascript.spec.whatwg.org/#comment-syntax
     if ((lastChar == '!' && str == "--") ||
+        // Need spaces for operators of the same kind to avoid: `a+++b`
         (strFirst == '+' && lastChar == '+') ||
         (strFirst == '-' && lastChar == '-') ||
+        // Needs spaces to avoid changing '34' to '34.', which would still be a valid number.
         (strFirst == '.' && _endWithInteger))
       _space()
 
@@ -165,8 +169,8 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   def removeTrailingNewline: Unit = 
     buf.removeTrailingNewline()
 
-  def exactSource(loc: Option[Location], node: Node, parent: Node): Unit = {
-    if (loc.isEmpty) print(parent)
+  def exactSource(loc: Option[Location], node: Node, parent: Option[Node]): Unit = {
+    if (loc.isEmpty) print(node)
     else {
       _catchUp(LocationType.Start, loc)
       buf.exactSource(loc, node, parent, this)
@@ -370,7 +374,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         case node => node.location
       }
 
-      exactSource(loc, node, parent.get)
+      exactSource(loc, node, parent)
 
       if (shouldPrintParens) {
         _printTrailingComments(node, parent)

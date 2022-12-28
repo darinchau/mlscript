@@ -145,7 +145,7 @@ class Buffer(map: Option[SourceMapBuilder], printer: Printer) {
     column: Option[Int],
     identifierName: Option[String],
     fileName: Option[String]
-  ): Unit = if (!map.isEmpty)
+  ): Unit = if (map.isDefined && line.isDefined && column.isDefined && identifierName.isDefined)
       map.get.mark(position, Position(line.get, column.get),
         fileName.getOrElse(""), identifierName)
 
@@ -186,7 +186,7 @@ class Buffer(map: Option[SourceMapBuilder], printer: Printer) {
   def hasContent: Boolean =
     !revertableQueue.isEmpty || last != '\u0000'
 
-  def exactSource(loc: Option[Location], node: Node, parent: Node, printer: Printer): Unit =
+  def exactSource(loc: Option[Location], node: Node, parent: Option[Node], printer: Printer): Unit =
     if (map.isEmpty) printer.print(parent)
     else {
       source(LocationType.Start, loc)
