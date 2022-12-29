@@ -465,9 +465,659 @@ class CodeGenerator(
       dedent()
       print(Some(cls), Some(node))
     }
+    case s @ ImportSpecifier(local, imported) => {
+      s.importKind match {
+        case Some(kind) =>
+          if (kind == ImportKind.Type) word("type")
+          else if (kind == ImportKind.TypeOf) word("typeof")
+        case _ => ()
+      }
+
+      print(Some(imported), Some(node))
+      // @ts-expect-error if (node.local && node.local.name !== node.imported.name)
+      {
+        space(); word("as"); space()
+        print(Some(local), Some(node))
+      }
+    }
+    case ImportDefaultSpecifier(local) => print(Some(local), Some(node))
+    case ExportDefaultSpecifier(exported) => print(Some(exported), Some(node))
+    case s @ ExportSpecifier(local, exported) => {
+      s.exportKind match {
+        case Some(kind) if (kind == ExportKind.Type) => word("type")
+        case _ => ()
+      }
+
+      print(Some(local), Some(node))
+      // @ts-expect-error if (node.local && node.local.name !== node.imported.name)
+      {
+        space(); word("as"); space()
+        print(Some(exported), Some(node))
+      }
+    }
+    case ExportNamespaceSpecifier(exported) => {
+      token("*"); space(); word("as"); space()
+      print(Some(exported), Some(node))
+    }
+    case dec @ ExportAllDeclaration(source) => {
+      word("export"); space()
+      dec.exportKind match {
+        case Some(value) if (value == ExportKind.Type) => {
+          word("type"); space()
+        }
+        case _ => ()
+      }
+
+      token("*"); space(); word("from"); space()
+      // @ts-expect-error
+      print(Some(source), Some(node))
+    }
+    case dec @ ExportNamedDeclaration(declaration, specifiers, source) => {
+      // TODO: process.env.BABEL_8_BREAKING
+      word("export"); space()
+      declaration match {
+        case Some(value) => {
+          print(declaration, Some(node))
+          value match {
+            case s: Statement => semicolon()
+            case _ => ()
+          }
+        }
+        case _ => dec.exportKind match {
+          case Some(value) if (value == ExportKind.Type) => {
+            word("type"); space()
+          }
+          case _ => ()
+        }
+      }
+
+      val res = specifiers.iterator.zipWithIndex.foldLeft((false, -1))(
+        (res, p) => if (!res._1 && res._2 > -1) res else p._1 match {
+          case s: ExportDefaultSpecifier => {
+            print(Some(s), Some(node))
+            if (p._2 < specifiers.length) { token(","); space() }
+            (true, p._2)
+          }
+          case s: ExportNamespaceSpecifier => {
+            print(Some(s), Some(node))
+            if (p._2 < specifiers.length) { token(","); space() }
+            (true, p._2)
+          }
+          case _ => (res._1, p._2)
+        })
+
+      if (res._2 < specifiers.length || res._1) {
+        token("{")
+        if (res._2 < specifiers.length) {
+          space()
+          printList(specifiers.drop(res._2), node, PrintListOptions(None, None, None, None))
+          space()
+        }
+        token("}")
+      }
+
+      source match {
+        case Some(value) => {
+          space(); word("from"); space()
+          dec.assertions match {
+            case Some(assertions) if (assertions.length > 0) => {
+              print(source, Some(node), true)
+              space()
+              word("assert"); space(); token("{"); space()
+              printList(assertions, node, PrintListOptions(None, None, None, None))
+              space(); token("}")
+            }
+            case _ => print(source, Some(node))
+          }
+        }
+        case _ => ()
+      }
+
+      semicolon()
+    }
+    case ExportDefaultDeclaration(declaration) => {
+      // TODO: process.env.BABEL_8_BREAKING
+      word("export")
+      noIndentInneerCommentsHere()
+      space(); word("default"); space()
+      print(Some(declaration), Some(node))
+      declaration match {
+        case s: Statement => semicolon()
+        case _ => ()
+      }
+    }
+    case dec @ ImportDeclaration(specifiers, source) => {
+      word("import"); space()
+      dec.importKind match {
+        case Some(ImportKind.Type) => {
+          noIndentInneerCommentsHere()
+          word("type"); space()
+        }
+        case Some(ImportKind.TypeOf) => {
+          noIndentInneerCommentsHere()
+          word("typeof"); space()
+        }
+        case _ if (dec.module.isDefined) => {
+          noIndentInneerCommentsHere()
+          word("module"); space()
+        }
+        case _ => ()
+      }
+
+      val res = specifiers.iterator.zipWithIndex.foldLeft((!specifiers.isEmpty, -1))(
+        (res, p) => if (!res._1) res else p._1 match {
+          case s: ImportDefaultSpecifier => {
+            print(Some(s), Some(node))
+            if (p._2 < specifiers.length) { token(","); space() }
+            (true, p._2)
+          }
+          case s: ImportNamespaceSpecifier => {
+            print(Some(s), Some(node))
+            if (p._2 < specifiers.length) { token(","); space() }
+            (true, p._2)
+          }
+          case _ => (false, p._2)
+        })
+
+      if (res._2 < specifiers.length) {
+        token("{")
+        space()
+        printList(specifiers.drop(res._2), node, PrintListOptions(None, None, None, None))
+        space()
+        token("}")
+      }
+      else if (!specifiers.isEmpty) dec.importKind match {
+        case Some(ImportKind.Type) => {
+          space(); word("from"); space()
+        }
+        case Some(ImportKind.TypeOf) => {
+          space(); word("from"); space()
+        }
+        case _ => ()
+      }
+
+      dec.assertions match {
+        case Some(value) => {
+          print(Some(source), Some(node), true)
+          space()
+          word("assert"); space(); token("{"); space()
+          printList(value, node, PrintListOptions(None, None, None, None))
+          space(); token("}")
+        }
+        case None => print(Some(source), Some(node))
+      }
+
+      // TODO: process.env.BABEL_8_BREAKING
+      semicolon()
+    }
+    case ImportAttribute(key, value) => {
+      print(Some(key))
+      token(":"); space()
+      print(Some(value))
+    }
+    case ImportNamespaceSpecifier(local) => {
+      token("*"); space()
+      word("as"); space()
+      print(Some(local), Some(node))
+    }
+    case exp @ TaggedTemplateExpression(tag, quasi) => {
+      print(Some(tag), Some(node))
+      print(exp.typeParameters, Some(node))
+      print(Some(quasi), Some(node))
+    }
+    case TemplateElement(value, tail) => {
+      // TODO: need parent
+    }
+    case TemplateLiteral(quasis, expressions) => {
+      quasis.iterator.zipWithIndex.foreach((q, i) => {
+        print(Some(q), Some(node))
+        if (i + 1 < quasis.length) print(Some(expressions(i)), Some(node))
+      })
+    }
+    case TSTypeAnnotation(anno) => {
+      token(":"); space()
+      // @ts-expect-error node.optional
+      print(Some(anno), Some(node))
+    }
+    case TSTypeParameterInstantiation(params) => {
+      token("<")
+      printList(params, node, PrintListOptions(None, None, None, None))
+      // TODO: need parent
+      token(">")
+    }
+    case tp @ TSTypeParameter(constraint, default, name) => {
+      if (tp.in.getOrElse(false)) {
+        word("in"); space()
+      }
+      if (tp.out.getOrElse(false)) {
+        word("out"); space()
+      }
+      // TODO process.env.BABEL_8_BREAKING
+      if (constraint.isDefined) {
+        space(); word("extends"); space()
+        print(constraint, Some(node))
+      }
+      if (default.isDefined) {
+        space(); word("="); space()
+        print(default, Some(node))
+      }
+    }
+    case prop @ TSParameterProperty(params) => {
+      prop.accessibility match {
+        case Some(AccessModifier.Private) => {
+          word("private"); space()
+        }
+        case Some(AccessModifier.Public) => {
+          word("public"); space()
+        }
+        case Some(AccessModifier.Protected) => {
+          word("protected"); space()
+        }
+        case _ => ()
+      }
+
+      if (prop.readonly.getOrElse(false)) {
+        word("readonly"); space()
+      }
+
+      // TODO: _param(node.parameter)
+    }
+    case fun @ TSDeclareFunction(id, tp, params, ret) => {
+      if (fun.declare.getOrElse(false)) {
+        word("declare"); space()
+      }
+      // TODO: _functionHead(node)
+      token(";")
+    }
+    case method @ TSDeclareMethod(dec, key, tp, params, ret) => {
+      // TODO: _classMethodHead(node)
+      token(";")
+    }
+    case TSQualifiedName(left, right) => {
+      print(Some(left), Some(node))
+      token(".")
+      print(Some(right), Some(node))
+    }
+    case TSCallSignatureDeclaration(tp, params, anno) => {
+      print(tp, Some(node))
+      token("(")
+      // TODO: _parameters(parameters, node)
+      token(")")
+      // TODO: process.env.BABEL_8_BREAKING
+      print(anno, Some(node))
+      token(";")
+    }
+    case TSConstructSignatureDeclaration(tp, params, anno) => {
+      word("new"); space()
+      print(tp, Some(node))
+      token("(")
+      // TODO: _parameters(parameters, node)
+      token(")")
+      // TODO: process.env.BABEL_8_BREAKING
+      print(anno, Some(node))
+      token(";")
+    }
+    case sig @ TSPropertySignature(key, anno, init, kind) => {
+      if (sig.readonly.getOrElse(false)) {
+        word("readonly"); space()
+      }
+      if (sig.computed.getOrElse(false)) token("[")
+      print(Some(key), Some(node))
+      if (sig.computed.getOrElse(false)) token("]")
+      if (sig.optional.getOrElse(false)) token("?")
+      print(anno, Some(node))
+      if (init.isDefined) {
+        space(); token("="); space()
+        print(init, Some(node))
+      }
+      token(";")
+    }
+    case sig @ TSMethodSignature(key, tp, params, anno, kind) => {
+      kind match {
+        case TSMethodSignatureKind.Getter => { word("get"); space() }
+        case TSMethodSignatureKind.Setter => { word("set"); space() }
+        case _ => ()
+      }
+
+      if (sig.computed.getOrElse(false)) token("[")
+      print(Some(key), Some(node))
+      if (sig.computed.getOrElse(false)) token("]")
+      if (sig.optional.getOrElse(false)) token("?")
+
+      print(tp, Some(node))
+      token("(")
+      // TODO: _parameters(parameters, node)
+      token(")")
+      // TODO: process.env.BABEL_8_BREAKING
+      print(anno, Some(node))
+
+      token(";")
+    }
+    case sig @ TSIndexSignature(params, anno) => {
+      if (sig.static.getOrElse(false)) {
+        word("static"); space()
+      }
+      if (sig.readonly.getOrElse(false)) {
+        word("readonly"); space()
+      }
+      token("[")
+      // TODO: _parameters(node.parameters, node)
+      token("]")
+      print(anno, Some(node))
+      token(";")
+    }
+    case TSFunctionType(tp, params, anno) => {
+      // TODO: process.env.BABEL_8_BREAKING
+      print(tp, Some(node))
+      token("(")
+      // TODO: _parameters(parameters, node)
+      token(")"); space(); token("=>"); space()
+      // TODO: process.env.BABEL_8_BREAKING
+      print(anno, Some(node))
+    }
+    case ct @ TSConstructorType(tp, params, anno) => {
+      if (ct.`abstract`.getOrElse(false)) {
+        word("abstract"); space()
+      }
+
+      word("new"); space()
+
+      print(tp, Some(node))
+      token("(")
+      // TODO: _parameters(parameters, node)
+      token(")"); space(); token("=>"); space()
+      // TODO: process.env.BABEL_8_BREAKING
+      print(anno, Some(node))
+    }
+    case TSTypeReference(name, tp) => {
+      print(Some(name), Some(node), true)
+      print(tp, Some(node), true)
+    }
+    case TSTypePredicate(name, anno, asserts) => {
+      if (asserts.getOrElse(false)) {
+        word("asserts"); space()
+      }
+
+      print(Some(name))
+      anno match {
+        case Some(value) => {
+          space(); word("is"); space()
+          print(Some(value.typeAnnotation))
+        }
+        case _ => ()
+      }
+    }
+    case TSTypeQuery(name, tp) => {
+      word("typeof"); space()
+      print(Some(name))
+      if (tp.isDefined) print(tp, Some(node))
+    }
+    case TSTypeLiteral(members) => {
+      tsPrintBraced(members, node)
+    }
+    case TSArrayType(element) => {
+      print(Some(element), Some(node), true)
+      token("[]")
+    }
+    case TSTupleType(element) => {
+      token("[")
+      printList(element, node, PrintListOptions(None, None, None, None))
+      token("]")
+    }
+    case TSOptionalType(anno) => {
+      print(Some(anno), Some(node))
+      token("?")
+    }
+    case TSRestType(anno) => {
+      token("...")
+      print(Some(anno), Some(node))
+    }
+    case TSNamedTupleMember(label, element, optional) => {
+      print(Some(label), Some(node))
+      if (optional) token("?")
+      token(":")
+      space()
+      print(Some(element), Some(node))
+    }
+    case TSUnionType(types) =>
+      tsPrintUnionOrIntersectionType(types, node, "|")
+    case TSIntersectionType(types) =>
+      tsPrintUnionOrIntersectionType(types, node, "&")
+    case TSConditionalType(checkType, extendsType, trueType, falseType) => {
+      print(Some(checkType))
+      space(); word("extends"); space()
+      print(Some(extendsType))
+      space(); token("?"); space()
+      print(Some(trueType))
+      space(); token(":"); space()
+      print(Some(falseType))
+    }
+    case TSInferType(tp) => {
+      token("infer"); space()
+      print(Some(tp))
+    }
+    case TSParenthesizedType(anno) => {
+      token("(")
+      print(Some(anno), Some(node))
+      token(")")
+    }
+    case TSTypeOperator(anno, op) => {
+      word(op); space()
+      print(Some(anno), Some(node))
+    }
+    case TSIndexedAccessType(obj, index) => {
+      print(Some(obj), Some(node), true)
+      token("[")
+      print(Some(index), Some(node))
+      token("]")
+    }
+    case map @ TSMappedType(tp, anno, name) => {
+      token("{"); space()
+      map.readonly match {
+        case Some("+") => token("+"); word("readonly"); space()
+        case Some("-") => token("-"); word("readonly"); space()
+        case Some(true) => word("readonly"); space()
+        case _ => ()
+      }
+
+      token("[")
+      // TODO: process.env.BABEL_8_BREAKING
+      space(); word("in"); space()
+      print(tp.constraint, Some(tp))
+      if (name.isDefined) {
+        space(); word("as"); space()
+        print(name, Some(node))
+      }
+      token("]")
+      map.readonly match {
+        case Some("+") => token("+"); token("?")
+        case Some("-") => token("-"); token("?")
+        case Some(true) => token("?")
+        case _ => ()
+      }
+      token(":"); space()
+      print(anno, Some(node))
+      space(); token("}")
+    }
+    case TSLiteralType(lit) => print(Some(lit), Some(node))
+    case TSExpressionWithTypeArguments(exp, tp) => {
+      print(Some(exp), Some(node))
+      print(tp, Some(node))
+    }
+    case dec @ TSInterfaceDeclaration(id, tp, ext, body) => {
+      if (dec.declare.getOrElse(false)) {
+        word("declare"); space()
+      }
+      word("interface"); space()
+      print(Some(id), Some(node))
+      print(tp, Some(node))
+      ext match {
+        case Some(value) if (value.length > 0) => {
+          space(); word("extends"); space()
+          printList(value, node, PrintListOptions(None, None, None, None))
+        }
+        case _ => ()
+      }
+
+      space()
+      print(Some(body), Some(node))
+    }
+    case TSInterfaceBody(body) => tsPrintBraced(body, node)
+    case dec @ TSTypeAliasDeclaration(id, tp, anno) => {
+      if (dec.declare.getOrElse(false)) {
+        word("declare"); space()
+      }
+
+      word("type"); space()
+      print(Some(id), Some(node))
+      print(tp, Some(node))
+      space(); token("="); space()
+      print(Some(anno), Some(node))
+      token(";")
+    }
+    case TSAsExpression(exp, anno) => {
+      val forceParens = exp.trailingComments match {
+        case Some(value) => value.length > 0
+        case _ => false
+      }
+      print(Some(exp), Some(node), true, 0, forceParens) // TODO: undefined?
+      space(); word("as"); space()
+      print(Some(anno), Some(node))
+    }
+    case TSSatisfiesExpression(exp, anno) => {
+      val forceParens = exp.trailingComments match {
+        case Some(value) => value.length > 0
+        case _ => false
+      }
+      print(Some(exp), Some(node), true, 0, forceParens) // TODO: undefined?
+      space(); word("satisfies"); space()
+      print(Some(anno), Some(node))
+    }
+    case TSTypeAssertion(anno, exp) => {
+      token("<")
+      print(Some(anno), Some(node))
+      token(">"); space()
+      print(Some(exp), Some(node))
+    }
+    case TSInstantiationExpression(exp, tp) => {
+      print(Some(exp), Some(node))
+      print(tp, Some(node))
+    }
+    case dec @ TSEnumDeclaration(id, members) => {
+      if (dec.declare.getOrElse(false)) {
+        word("declare"); space()
+      }
+
+      if (dec.const.getOrElse(false)) {
+        word("const"); space()
+      }
+
+      word("enum"); space()
+      print(Some(id), Some(node))
+      space()
+      tsPrintBraced(members, node)
+    }
+    case TSEnumMember(id, init) => {
+      print(Some(id), Some(node))
+      if (init.isDefined) {
+        space(); token("="); space()
+        print(init, Some(node))
+      }
+      token(",")
+    }
+    case dec @ TSModuleDeclaration(id, body) => {
+      if (dec.declare.getOrElse(false)) {
+        word("declare"); space()
+      }
+
+      if (dec.global.getOrElse(false)) {
+        id match {
+          case i: Identifier => word("namespace")
+          case _ => word("module")
+        }
+      }
+      print(Some(id), Some(node))
+      // TODO: should body be optional
+
+      def run (md: TSModuleDeclaration): Unit = {
+        token(".")
+        print(Some(md.id), Some(md))
+        md.body match {
+          case m: TSModuleDeclaration => run(m)
+          case _ => ()
+        }
+      }
+
+      body match {
+        case m: TSModuleDeclaration => run(m)
+        case _ => ()
+      }
+
+      space()
+      print(Some(body), Some(node))
+    }
+    case TSModuleBlock(body) => tsPrintBraced(body, node)
+    case TSImportType(arg, qualifier, tp) => {
+      word("import"); token("(")
+      print(Some(arg), Some(node))
+      token(")")
+      if (qualifier.isDefined) {
+        token(".")
+        print(qualifier, Some(node))
+      }
+      if (tp.isDefined) {
+        print(tp, Some(node))
+      }
+    }
+    case dec @ TSImportEqualsDeclaration(id, ref, exp) => {
+      if (exp) { word("export"); space() }
+      word("import"); space()
+      print(Some(id), Some(node))
+      space()
+      token("="); space()
+      print(Some(ref), Some(node))
+      token(";")
+    }
+    case TSExternalModuleReference(exp) => {
+      token("require(")
+      print(Some(exp), Some(node))
+      token(")")
+    }
+    case TSNonNullExpression(exp) => {
+      print(Some(exp), Some(node))
+      token("!")
+    }
+    case TSExportAssignment(exp) => {
+      word("export"); space(); token("="); space()
+      print(Some(exp), Some(node))
+      token(";")
+    }
+    case TSNamespaceExportDeclaration(id) => {
+      word("export"); space(); token("as"); space(); word("namespace"); space()
+      print(Some(id), Some(node))
+    }
     case _ => () // TODO
 
   def generate() = super.generate(ast)
+
+  private def tsPrintBraced(members: List[Node], node: Node) = {
+    token("{")
+    if (members.length > 0) {
+      indent()
+      newline()
+      members.foreach((m) => {
+        print(Some(m), Some(node))
+        newline()
+      })
+      dedent()
+    }
+
+    sourceWithOffset(LocationType.End, node.location, 0, -1)
+    rightBrace()
+  }
+
+  private def tsPrintUnionOrIntersectionType(types: List[Node with TSType], node: Node, sep: String) =
+    ()// TODO: printJoin(types, node)
 
 end CodeGenerator
 
