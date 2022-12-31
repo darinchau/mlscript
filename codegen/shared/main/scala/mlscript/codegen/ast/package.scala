@@ -36,7 +36,7 @@ object Comment:
   def apply(value: String): Comment = Comment(value, None, None, None, None)
   def apply(value: String, start: Int, end: Int): Comment = Comment(value, Some(start), Some(end), None, None)
 
-abstract class Node extends Located:
+sealed abstract class Node extends Located:
   var leadingComments: Option[List[Comment]] = None
   var innerComments: Option[List[Comment]] = None
   var trailingComments: Option[List[Comment]] = None
