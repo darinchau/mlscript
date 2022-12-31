@@ -115,6 +115,9 @@ class CodeGenerator(
           sourceWithOffset(LocationType.End, node.location, 0, -1)
           rightBrace()
     // END classes.ts
+    // BEGIN flow.ts
+    case _: Node with Flow => ???
+    // END flow.ts
     // BEGIN jsx.ts
     case JSXAttribute(name, value) =>
       print(Some(name), Some(node))
@@ -186,6 +189,52 @@ class CodeGenerator(
       token("</")
       token(">")
     // END jsx.ts
+
+    // BEGIN modules.ts
+    case node @ ImportSpecifier(local, imported) =>
+      node.importKind match
+        case Some(ImportKind.Type) =>
+          word("type")
+          space()
+        case Some(ImportKind.TypeOf) =>
+          word("typeof")
+          space()
+        case _ => ()
+      print(Some(imported), Some(node))
+      imported match
+        case Identifier(name) if local.name != name =>
+          space()
+          word("as")
+          space()
+          print(Some(local), Some(node))
+        case _ => ()
+    case ImportDefaultSpecifier(local) =>
+      print(Some(local), Some(node))
+    case ExportDefaultSpecifier(exported) =>
+      print(Some(exported), Some(node))
+    case node @ ExportSpecifier(local, exported) =>
+      node.exportKind match
+        case Some(ExportKind.Type) =>
+          word("type")
+          space()
+        case _ => ()
+      print(Some(local), Some(node))
+      exported match
+        case Identifier(name) if local.name != name =>
+          space()
+          word("as")
+          space()
+          print(Some(local), Some(node))
+        case _ => ()
+      
+    case ExportNamespaceSpecifier(exported) =>
+      token("*")
+      space()
+      word("as")
+      space()
+      print(Some(exported), Some(node))
+    // To be continued...
+    // END modules.ts
     case ThisExpression() => word("this")
     case Super() => word("super")
     case Import() => word("import")
