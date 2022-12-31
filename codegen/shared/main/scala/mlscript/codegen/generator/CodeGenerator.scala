@@ -79,7 +79,113 @@ class CodeGenerator(
         print(value, Some(node))
       }
       semicolon()
+    case node @ ClassAccessorProperty(key, value, typeAnnotation, decorators, computed, static) =>
+      printJoin(decorators, node, ???)
+      node.key.location.flatMap(_.end).map(_.line).foreach(catchUp)
+      // tsPrintClassMemberModifiers(node) // TODO: Not implemented yet
+      word("accessor", true)
+      space()
+      if (node.computed) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+      } else {
+        // _variance(node) // TODO: Not implemented yet
+        print(Some(key), Some(node))
+      }
+      if (node.optional.getOrElse(false)) token("?")
+      if (node.definite.getOrElse(false)) token("!")
+      print(typeAnnotation, Some(node))
+      value.foreach { _ =>
+        space()
+        token("=")
+        space()
+        print(value, Some(node))
+      }
+      semicolon()
+    case StaticBlock(body) =>
+      word("static")
+      space()
+      token("{")
+      body match
+        case Nil => token("}")
+        case _ =>
+          newline()
+          printSequence(body, node, ???)
+          sourceWithOffset(LocationType.End, node.location, 0, -1)
+          rightBrace()
     // END classes.ts
+    // BEGIN jsx.ts
+    case JSXAttribute(name, value) =>
+      print(Some(name), Some(node))
+      value.foreach { _ =>
+        token("=")
+        print(value, Some(node))
+      }
+    case JSXIdentifier(name) => word(name)
+    case JSXNamespacedName(namespace, name) =>
+      print(Some(namespace), Some(node))
+      token(":")
+      print(Some(name), Some(node))
+    case JSXSpreadAttribute(argument) =>
+      token("{")
+      token("...")
+      print(Some(argument), Some(node))
+      token("}")
+    case JSXExpressionContainer(expression) =>
+      token("{")
+      print(Some(expression), Some(node))
+      token("}")
+    case JSXSpreadChild(expression) =>
+      token("{")
+      token("...")
+      print(Some(expression), Some(node))
+      token("}")
+    case JSXText(value) =>
+      getPossibleRaw(node) match
+        case None => token(value, true)
+        case Some(raw) => token(raw, true)
+    case JSXElement(openingElement, closingElement, children, selfClosing) =>
+      print(Some(openingElement), Some(node))
+      if (!openingElement.selfClosing) {
+        indent()
+        children.foreach { child => print(Some(child), Some(node)) }
+        dedent()
+        print(closingElement, Some(node))
+      }
+    case node @ JSXOpeningElement(name, attributes, selfClosing) =>
+      token("<")
+      print(Some(name), Some(node))
+      print(node.typeParameters, Some(node)) // TS
+      if (!attributes.isEmpty) {
+        space()
+        printJoin(Some(attributes), node, ???)
+      }
+      if (selfClosing) {
+        space()
+        token("/>")
+      } else {
+        token(">")
+      }
+    case JSXClosingElement(name) =>
+      token("</")
+      print(Some(name), Some(node))
+      token(">")
+    case JSXEmptyExpression() =>
+      printInnerComments()
+    case JSXFragment(openingFragment, closingFragment, children) =>
+      print(Some(openingFragment), Some(node))
+      indent()
+      children.foreach { child => print(Some(child), Some(node)) }
+      dedent()
+      print(Some(closingFragment), Some(node))
+    case JSXOpeningFragment() =>
+      token("<")
+      token(">")
+    case JSXClosingFragment() =>
+      token("</")
+      token(">")
+    // END jsx.ts
     case ThisExpression() => word("this")
     case Super() => word("super")
     case Import() => word("import")
