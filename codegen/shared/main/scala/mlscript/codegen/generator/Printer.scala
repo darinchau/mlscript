@@ -43,8 +43,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private var _noLineTerminator = false
   private var _endsWithWord = false
   private var _endWithInteger = false
-  private var _indentChar = '\u0000'
-  private var _indentRepeat = 0
+  private val indentString = format.indent
   private var _endsWithInteger = false
   private var _endWithInnerRaw = false
   private var _indentInnerComments = true
@@ -73,8 +72,8 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   def semicolon(force: Boolean = false): Unit = {
     _maybeAddAuxComment()
-    if (force) _appendChar(';')
-    else _queue(';')
+    if (force) appendChar(';')
+    else queue(';')
 
     _noLineTerminator = false
   }
@@ -86,11 +85,11 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   def space(force: Boolean = false): Unit =
     if (!format.compact) {
-      if (force) _space()
+      if (force) queue(' ')
       else if (buf.hasContent) {
         val lastCp = getLastChar()
         if (lastCp != ' ' && lastCp != '\n')
-          _space()
+          queue(' ')
       }
     }
 
@@ -131,7 +130,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         (strFirst == '-' && lastChar == '-') ||
         // Needs spaces to avoid changing '34' to '34.', which would still be a valid number.
         (strFirst == '.' && _endWithInteger))
-      _space()
+      queue(' ')
 
     _maybeAddAuxComment()
     _append(str, maybeNewline)
@@ -145,10 +144,10 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     if ((char == '+' && lastChar == '+') ||
         (char == '-' && lastChar == '-') ||
         (char == '.' && lastChar == '.'))
-      _space()
+      queue(' ')
 
     _maybeAddAuxComment()
-    _appendChar(char)
+    appendChar(char)
     _noLineTerminator = false
   }
 
@@ -158,7 +157,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         space()
       else if (force) {
         for (ii <- 0 until (if (i > 2) 2 else i) - buf.getNewlineCount)
-          _newline()
+          queue('\n')
       }
     }
 
@@ -208,9 +207,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         buf.withSource(prop, loc, node, parent, this)
       }
 
-  private def _space() = _queue(' ')
-  private def _newline() = _queue('\n')
-
   private def _append(str: String, maybeNewline: Boolean): Unit = {
     _maybeAddParen(str)
     _maybeIndent(str.charAt(0))
@@ -221,7 +217,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     _endsWithInteger = false
   }
 
-  private def _appendChar(char: Char): Unit = {
+  private def appendChar(char: Char): Unit = {
     _maybeAddParenChar(char)
     _maybeIndent(char)
 
@@ -231,7 +227,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     _endWithInteger = false
   }
 
-  private def _queue(char: Char): Unit = {
+  private def queue(char: Char): Unit = {
     _maybeAddParenChar(char)
     _maybeIndent(char)
 
@@ -245,7 +241,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     if (indentLevel > 0 &&
         firstChar != '\n' &&
         endsWith('\n'))
-      buf.queueIndentation(_indentChar, _getIndent)
+      buf.queueIndentation(indentString.charAt(0), indentLevel * indentString.length())
 
   private def _shouldIndent(firstChar: Char) =
     indentLevel > 0 && firstChar != '\n' && endsWith('\n')
@@ -302,7 +298,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   def catchUp(line: Int): Unit =
     if (format.retainLines && line > buf.getCurrentLine) {
-      _newline()
+      queue('\n')
       catchUp(line)
     }
 
@@ -312,12 +308,9 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         case Some(loc) => 
           val pos = loc(prop)
           for (count <- 0 until (pos.get.line - buf.getCurrentLine)) {
-            _newline()
+            queue('\n')
           }
         case None => ()
-
-  private def _getIndent: Int =
-    _indentRepeat * indentLevel
 
   def printTerminatorless(node: Node, parent: Node, isLabel: Boolean): Unit =
     if (isLabel) {
@@ -570,7 +563,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
           else s"/*${comment.value}*/"
         val indentSize =
           (if (format.retainLines) 0 else buf.getCurrentColumn) +
-          (if (_shouldIndent('/') || format.retainLines) _getIndent else 0)
+          (if (_shouldIndent('/') || format.retainLines) indentLevel * indentString.length() else 0)
 
         newlineVal.replaceAll("\n(?!$)", s"\n${" " * indentSize}")
       }
@@ -579,7 +572,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     else if (!_noLineTerminator) s"//${comment.value}"
     else s"/*${comment.value}*/"
 
-    if (endsWith('/')) _space()
+    if (endsWith('/')) queue(' ')
 
     source(LocationType.Start, comment.location)
     _append(value, isBlockComment)

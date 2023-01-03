@@ -13,6 +13,7 @@ class BufferSuite extends munit.FunSuite:
     val auxiliaryCommentAfter: String = ""
     val adjustMultilineComment: Boolean = false
     val retainFunctionParens: Boolean = false
+    val indent = "  "
     
     def shouldPrintComment(comment: String): Boolean = false
   }, new SourceMapBuilder(None, None, Left(""))) {

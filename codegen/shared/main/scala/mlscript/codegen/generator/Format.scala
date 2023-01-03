@@ -9,6 +9,7 @@ trait Format {
   val auxiliaryCommentAfter: String
   val adjustMultilineComment: Boolean
   val retainFunctionParens: Boolean
+  val indent: String
   
   def shouldPrintComment(comment: String): Boolean
 }
