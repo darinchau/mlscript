@@ -412,37 +412,47 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
       case None => None
 
   def printJoin[T <: Node](nodes: Option[List[T]], parent: Node, opts: PrintSequenceOptions): Unit =
-    if (!nodes.isEmpty && nodes.get.length > 0) {
-      if (!opts.indent.isEmpty) indent()
+    nodes match {
+      case Some(nodes) if (nodes.length > 0) => {
+        if (!opts.indent.isEmpty) indent()
 
-      val separator = if (opts.separator.isEmpty) None else () => opts.separator.get(this)
+        val separator = if (opts.separator.isEmpty) None else () => opts.separator.get(this)
 
-      nodes.get.zipWithIndex.foreach((node, i) => {
-        // TODO: check is node is empty
+        nodes.zipWithIndex.foreach((node, i) => {
+          // TODO: check is node is empty
 
-        if (opts.statement.getOrElse(false))
-          _printNewline(i == 0, AddNewlineOptions(0, opts.addNewlines.get))
+          if (opts.statement.getOrElse(false))
+            _printNewline(i == 0, AddNewlineOptions(0, opts.addNewlines.getOrElse((b, n) => 0)))
 
-        print(Some(node), Some(parent), false, opts.trailingCommentsLineOffset.getOrElse(0))
+          print(Some(node), Some(parent), false, opts.trailingCommentsLineOffset.getOrElse(0))
 
-        if (!opts.iterator.isEmpty) opts.iterator.get(node, i)
-        if (i < nodes.get.length && !opts.separator.isEmpty) opts.separator.get(this)
-
-        if (opts.statement.getOrElse(false)) {
-          if (i + 1 == nodes.get.length) newline(1)
-          else {
-            val nextNode = nodes.get(i + 1)
-            val newlinesOpts = nextNode.location match {
-              case Some(loc) => AddNewlineOptions(loc.start.get.line, opts.addNewlines.get)
-              case _ => AddNewlineOptions(0, opts.addNewlines.get)
-            }
-
-            _printNewline(true, newlinesOpts)
+          opts.iterator match {
+            case Some(it) => it(node, i)
+            case _ => ()
           }
-        }
-      })
 
-      if (!opts.indent.isEmpty) dedent()
+          opts.separator match {
+            case Some(sep) if (i < nodes.length) => sep(this)
+            case _ => ()
+          }
+
+          if (opts.statement.getOrElse(false)) {
+            if (i + 1 == nodes.length) newline(1)
+            else {
+              val nextNode = nodes(i + 1)
+              val newlinesOpts = nextNode.location match {
+                case Some(loc) => AddNewlineOptions(loc.start.get.line, opts.addNewlines.getOrElse((b, n) => 0))
+                case _ => AddNewlineOptions(0, opts.addNewlines.getOrElse((b, n) => 0))
+              }
+
+              _printNewline(true, newlinesOpts)
+            }
+          }
+        })
+
+        if (!opts.indent.isEmpty) dedent()
+      }
+      case _ => ()
     }
 
   def printAndIndentOnComments(node: Node, parent: Node) = {

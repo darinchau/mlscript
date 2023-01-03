@@ -28,6 +28,14 @@ class CodeGenerationSuite extends munit.FunSuite:
       val res = CodeGenerator(InterpreterDirective("foo")(None, None, None), format, sourceMap).generate()
       assertEquals(res.code, "#!foo")
     }
+    {
+      val res = CodeGenerator(BlockStatement(List(
+        ExpressionStatement(Identifier("foo")(None, None, None))(None, None, None),
+        ExpressionStatement(Identifier("bar")(None, None, None))(None, None, None),
+        ExpressionStatement(Identifier("baz")(None, None, None))(None, None, None)
+      ))(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "{foo;bar;baz;}")
+    }
   }
   test("Code Generation - Classes") {
     
