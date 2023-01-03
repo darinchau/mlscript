@@ -116,7 +116,7 @@ class CodeGenerator(
           rightBrace()
     // END classes.ts
     // BEGIN flow.ts
-    case _: Node with Flow => ???
+    
     // END flow.ts
     // BEGIN jsx.ts
     case JSXAttribute(name, value) =>
@@ -189,6 +189,29 @@ class CodeGenerator(
       token("</")
       token(">")
     // END jsx.ts
+    
+    // BEGIN flow.ts
+    case AnyTypeAnnotation() => word("any")
+    case BooleanTypeAnnotation() => word("boolean")
+    case NullLiteralTypeAnnotation() => word("null")
+    case ExistsTypeAnnotation() => token("*")
+    case MixedTypeAnnotation() => word("mixed")
+    case EmptyTypeAnnotation() => word("empty")
+    case NumberTypeAnnotation() => word("number")
+    case StringTypeAnnotation() => word("string")
+    case ThisTypeAnnotation() => word("this")
+    case SymbolTypeAnnotation() => word("symbol")
+    case VoidTypeAnnotation() => word("void")
+    case BooleanLiteralTypeAnnotation(value) =>
+      if (value) word("true")
+      else word("false")
+    case InferredPredicate() => { token("%"); word("checks") }
+    case Variance(kind) => kind match {
+      case VarianceKind.Contravariant => token("+")
+      case VarianceKind.Covariant => token("-")
+    }
+    // To be continued...
+    // END flow.ts
 
     // BEGIN modules.ts
     case node @ ImportSpecifier(local, imported) =>
@@ -239,19 +262,6 @@ class CodeGenerator(
     case Super() => word("super")
     case Import() => word("import")
     case EmptyStatement() => semicolon(true)
-    case AnyTypeAnnotation() => word("any")
-    case BooleanTypeAnnotation() => word("boolean")
-    case NullLiteralTypeAnnotation() => word("null")
-    case ExistsTypeAnnotation() => token("*")
-    case MixedTypeAnnotation() => word("mixed")
-    case EmptyTypeAnnotation() => word("empty")
-    case NumberTypeAnnotation() => word("number")
-    case StringTypeAnnotation() => word("string")
-    case ThisTypeAnnotation() => word("this")
-    case SymbolTypeAnnotation() => word("symbol")
-    case VoidTypeAnnotation() => word("void")
-    case JSXOpeningFragment() => { token("<"); token(">") }
-    case JSXClosingFragment() => { token("</"); token(">") }
     case DebuggerStatement() => { word("debugger"); semicolon() }
     case PipelinePrimaryTopicReference() => token("#")
     case TSAnyKeyword() => word("any")
@@ -269,14 +279,6 @@ class CodeGenerator(
     case TSIntrinsicKeyword() => word("intrinsic")
     case TSThisType() => word("this")
     case InterpreterDirective(value) => { token(s"#!${value}"); newline(1, true) }
-    case BooleanLiteralTypeAnnotation(value) =>
-      if (value) word("true")
-      else word("false")
-    case InferredPredicate() => { token("%"); word("checks") }
-    case Variance(kind) => kind match {
-      case VarianceKind.Contravariant => token("+")
-      case VarianceKind.Covariant => token("-")
-    }
     case Placeholder(expected, name) => {
       token("%%")
       print(Some(name), Some(node))
@@ -547,112 +549,10 @@ class CodeGenerator(
       sourceWithOffset(LocationType.End, node.location, 0, -1)
       rightBrace()
     }
-    case JSXAttribute(name, value) => {
-      print(Some(name), Some(node))
-      value match {
-        case Some(_) => { token("="); print(value, Some(node)) }
-        case _ => ()
-      }
-    }
-    case JSXIdentifier(name) => word(name)
-    case JSXNamespacedName(ns, name) => {
-      print(Some(ns), Some(node))
-      token(":")
-      print(Some(name), Some(node))
-    }
     case JSXMemberExpression(obj, prop) => {
       print(Some(obj), Some(node))
       token(".")
       print(Some(prop), Some(node))
-    }
-    case JSXSpreadAttribute(args) => {
-      token("{"); token("...")
-      print(Some(args), Some(node))
-      token("}")
-    }
-    case JSXExpressionContainer(exp) => {
-      token("{")
-      print(Some(exp), Some(node))
-      token("}")
-    }
-    case JSXSpreadChild(exp) => {
-      token("{"); token("...")
-      print(Some(exp), Some(node))
-      token("}")
-    }
-    case JSXText(txt) => {
-      val raw = getPossibleRaw(node)
-      token(raw.getOrElse(txt), true)
-    }
-    case JSXElement(op, cls, children, selfClosing) => {
-      print(Some(op), Some(node))
-      if (!op.selfClosing) {
-        indent()
-        children.foreach((child) => print(Some(child), Some(node)))
-        dedent()
-        print(cls, Some(node))
-      }
-    }
-    case ele @ JSXOpeningElement(name, attr, selfClosing) => {
-      token("<")
-      print(Some(name), Some(node))
-      print(ele.typeParameters, Some(node))
-      if (attr.length > 0) {
-        space()
-        // printJoin
-      }
-      if (selfClosing) {
-        space()
-        token("/>")
-      }
-      else token(">")
-    }
-    case JSXClosingElement(name) => {
-      token("</")
-      print(Some(name), Some(node))
-      token(">")
-    }
-    case e: JSXEmptyExpression => printInnerComments()
-    case JSXFragment(op, cls, children) => {
-      print(Some(op), Some(node))
-      indent()
-      children.foreach((child) => print(Some(child), Some(node)))
-      dedent()
-      print(Some(cls), Some(node))
-    }
-    case s @ ImportSpecifier(local, imported) => {
-      s.importKind match {
-        case Some(kind) =>
-          if (kind == ImportKind.Type) word("type")
-          else if (kind == ImportKind.TypeOf) word("typeof")
-        case _ => ()
-      }
-
-      print(Some(imported), Some(node))
-      // @ts-expect-error if (node.local && node.local.name !== node.imported.name)
-      {
-        space(); word("as"); space()
-        print(Some(local), Some(node))
-      }
-    }
-    case ImportDefaultSpecifier(local) => print(Some(local), Some(node))
-    case ExportDefaultSpecifier(exported) => print(Some(exported), Some(node))
-    case s @ ExportSpecifier(local, exported) => {
-      s.exportKind match {
-        case Some(kind) if (kind == ExportKind.Type) => word("type")
-        case _ => ()
-      }
-
-      print(Some(local), Some(node))
-      // @ts-expect-error if (node.local && node.local.name !== node.imported.name)
-      {
-        space(); word("as"); space()
-        print(Some(exported), Some(node))
-      }
-    }
-    case ExportNamespaceSpecifier(exported) => {
-      token("*"); space(); word("as"); space()
-      print(Some(exported), Some(node))
     }
     case dec @ ExportAllDeclaration(source) => {
       word("export"); space()
