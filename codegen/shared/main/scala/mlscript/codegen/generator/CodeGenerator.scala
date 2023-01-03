@@ -13,7 +13,7 @@ class CodeGenerator(
   override def print(node: Node): Unit = node match
     // BEGIN classes.ts
     case node @ ClassDeclaration(id, superClass, body, decorators) =>
-      printJoin(decorators, node, ???)
+      printJoin(decorators, node, PrintSequenceOptions())
       if (node.declare.getOrElse(false)) {
         word("declare")
         space()
@@ -37,7 +37,7 @@ class CodeGenerator(
         space()
         word("implements")
         space()
-        printList(implements, node, ???)
+        printList(implements, node, PrintSequenceOptions())
       }
       space()
       print(Some(node.body), Some(node))
@@ -52,13 +52,13 @@ class CodeGenerator(
         case _ =>
           newline()
           indent()
-          printSequence(body, node, ???)
+          printSequence(body, node, PrintSequenceOptions())
           dedent()
           if (!endsWith('\n')) newline()
           sourceWithOffset(LocationType.End, node.location, 0, -1)
           rightBrace()
     case node @ ClassProperty(key, value, typeAnnotation, decorators, computed, static) =>
-      printJoin(decorators, node, ???)
+      printJoin(decorators, node, PrintSequenceOptions())
       node.key.location.flatMap(_.end.map(_.line)).foreach(catchUp)
       // tsPrintClassMemberModifiers(node) // TODO: Not implemented yet
       if (node.computed) {
@@ -80,7 +80,7 @@ class CodeGenerator(
       }
       semicolon()
     case node @ ClassAccessorProperty(key, value, typeAnnotation, decorators, computed, static) =>
-      printJoin(decorators, node, ???)
+      printJoin(decorators, node, PrintSequenceOptions())
       node.key.location.flatMap(_.end).map(_.line).foreach(catchUp)
       // tsPrintClassMemberModifiers(node) // TODO: Not implemented yet
       word("accessor", true)
@@ -111,7 +111,7 @@ class CodeGenerator(
         case Nil => token("}")
         case _ =>
           newline()
-          printSequence(body, node, ???)
+          printSequence(body, node, PrintSequenceOptions(indent = Some(true)))
           sourceWithOffset(LocationType.End, node.location, 0, -1)
           rightBrace()
     // END classes.ts
@@ -162,7 +162,7 @@ class CodeGenerator(
       print(node.typeParameters, Some(node)) // TS
       if (!attributes.isEmpty) {
         space()
-        printJoin(Some(attributes), node, ???)
+        printJoin(Some(attributes), node, PrintSequenceOptions(separator = Some((p: Printer)=>p.space())))
       }
       if (selfClosing) {
         space()
@@ -296,7 +296,7 @@ class CodeGenerator(
       if (directives.length > 0) {
         val newlines = if (body.length > 0) 2 else 1
         printSequence(directives, node, PrintSequenceOptions(
-          None, None, Some(newlines), None, None
+          trailingCommentsLineOffset = Some(newlines)
         ))
 
         directives.last.trailingComments match {
@@ -305,16 +305,14 @@ class CodeGenerator(
         }
       }
 
-      printSequence(body, node, PrintSequenceOptions(
-        None, None, None, None, None
-      ))
+      printSequence(body, node, PrintSequenceOptions())
     }
     case BlockStatement(body, directives) => {
       token("{")
       if (directives.length > 0) {
         val newlines = if (body.length > 0) 2 else 1
         printSequence(directives, node, PrintSequenceOptions(
-          None, Some(true), Some(newlines), None, None
+          indent = Some(true), trailingCommentsLineOffset = Some(newlines)
         ))
 
         directives.last.trailingComments match {
@@ -323,9 +321,7 @@ class CodeGenerator(
         }
       }
 
-      printSequence(body, node, PrintSequenceOptions(
-          None, Some(true), None, None, None
-      ))
+      printSequence(body, node, PrintSequenceOptions(indent = Some(true)))
 
       sourceWithOffset(LocationType.End, node.location, 0, -1)
       rightBrace()
@@ -1172,8 +1168,10 @@ class CodeGenerator(
     rightBrace()
   }
 
-  private def tsPrintUnionOrIntersectionType(types: List[Node with TSType], node: Node, sep: String) =
-    ()// TODO: printJoin(types, node)
+  private def tsPrintUnionOrIntersectionType(types: List[Node], node: Node, sep: String) =
+    printJoin(Some(types), node, PrintSequenceOptions(
+      separator = Some((p: Printer) => { p.space(); p.token(sep); p.space(); })
+    ))
 
 end CodeGenerator
 
