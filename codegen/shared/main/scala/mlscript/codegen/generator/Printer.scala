@@ -16,18 +16,13 @@ case class AddNewlineOptions(
 )
 
 case class PrintSequenceOptions(
-  val statement: Option[Boolean],
-  val indent: Option[Boolean],
-  val trailingCommentsLineOffset: Option[Int],
-  val nextNodeStartLine: Option[Int],
-  val addNewlines: Option[(Boolean, Node)=>Int]
-)
-
-case class PrintListOptions(
-  val separator: Option[(Printer) => Unit],
-  val iterator: Option[(Node, Int) => Unit],
-  val statement: Option[Boolean],
-  val indent: Option[Boolean]
+  val statement: Option[Boolean] = None,
+  val indent: Option[Boolean] = None,
+  val trailingCommentsLineOffset: Option[Int] = None,
+  val nextNodeStartLine: Option[Int] = None,
+  val addNewlines: Option[(Boolean, Node)=>Int] = None,
+  val separator: Option[(Printer) => Unit] = None,
+  val iterator: Option[(Node, Int) => Unit] = None
 )
 
 abstract class Printer(format: Format, map: SourceMapBuilder) {
@@ -419,7 +414,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         case _ => None
       case None => None
 
-  def printJoin[T <: Node](nodes: Option[List[T]], parent: Node, opts: Printer.PrintJoinOptions): Unit =
+  def printJoin[T <: Node](nodes: Option[List[T]], parent: Node, opts: PrintSequenceOptions): Unit =
     if (!nodes.isEmpty && nodes.get.length > 0) {
       if (!opts.indent.isEmpty) indent()
 
@@ -505,16 +500,17 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   def noIndentInneerCommentsHere(): Unit = _indentInnerComments = false
 
-  def printSequence[T <: Node](nodes: IterableOnce[T], parent: Node, opts: PrintSequenceOptions): Unit = {
-    val newOpts = PrintSequenceOptions(Some(true), opts.indent,
-      opts.trailingCommentsLineOffset, opts.nextNodeStartLine, opts.addNewlines)
-    // printJoin(Some(nodes), parent, newOpts) TODO: type issue here
+  def printSequence[T <: Node](nodes: List[T], parent: Node, opts: PrintSequenceOptions): Unit = {
+    val newOpts = PrintSequenceOptions(statement = Some(true), indent = opts.indent,
+      trailingCommentsLineOffset = opts.trailingCommentsLineOffset,
+      nextNodeStartLine = opts.nextNodeStartLine, addNewlines = opts.addNewlines)
+    printJoin(Some(nodes), parent, newOpts)
   }
 
-  def printList(items: IterableOnce[Node], parent: Node, opts: PrintListOptions): Unit = {
-    val newOpts = PrintListOptions(if (opts.separator.isEmpty) Some(Printer.commaSeparator) else opts.separator,
-      opts.iterator, opts.statement, opts.indent)
-    // printJoin(Some(items), parent, newOpts) TODO: type issue here
+  def printList(items: List[Node], parent: Node, opts: PrintSequenceOptions): Unit = {
+    val newOpts = PrintSequenceOptions(separator = Some(opts.separator.getOrElse(Printer.commaSeparator)),
+      iterator = opts.iterator, statement = opts.statement, indent = opts.indent)
+    printJoin(Some(items), parent, newOpts)
   }
 
   private def _printNewline(newline: Boolean, opts: AddNewlineOptions) = 
@@ -708,8 +704,6 @@ object Printer {
     case MemberExpression(obj, _, _, _) => isOrHasCallExpression(obj)
     case _ => false
   }
-
-  type PrintJoinOptions = PrintListOptions & PrintSequenceOptions
 
   def commaSeparator(printer: Printer): Unit = {
     printer.token(",")

@@ -405,11 +405,11 @@ class CodeGenerator(
       // print(Some(ne.typeArguments), Some(ne))
       // print(Some(ne.typeParameters), Some(ne))
       token("(")
-      printList(args, ne, PrintListOptions(None, None, None, None))
+      printList(args, ne, PrintSequenceOptions())
       token(")")
     }
     case SequenceExpression(exps) =>
-      printList(exps, node, PrintListOptions(None, None, None, None))
+      printList(exps, node, PrintSequenceOptions())
     case Decorator(exp) => {
       token("@")
       if (CodeGenerator.shouldParenthesizeDecoratorExpression(exp)) {
@@ -447,7 +447,7 @@ class CodeGenerator(
       if (opt) token("?.")
       print(n.typeArguments, Some(node))
       token("(")
-      printList(args, node, PrintListOptions(None, None, None, None))
+      printList(args, node, PrintSequenceOptions())
       token(")")
     }
     case ce @ CallExpression(callee, args) => {
@@ -455,7 +455,7 @@ class CodeGenerator(
       print(ce.typeArguments, Some(node))
       print(ce.typeParameters, Some(node))
       token("(")
-      printList(args, node, PrintListOptions(None, None, None, None))
+      printList(args, node, PrintSequenceOptions())
       token(")")
     }
     case AwaitExpression(args) => {
@@ -605,7 +605,7 @@ class CodeGenerator(
         token("{")
         if (res._2 < specifiers.length) {
           space()
-          printList(specifiers.drop(res._2), node, PrintListOptions(None, None, None, None))
+          printList(specifiers.drop(res._2), node, PrintSequenceOptions())
           space()
         }
         token("}")
@@ -619,7 +619,7 @@ class CodeGenerator(
               print(source, Some(node), true)
               space()
               word("assert"); space(); token("{"); space()
-              printList(assertions, node, PrintListOptions(None, None, None, None))
+              printList(assertions, node, PrintSequenceOptions())
               space(); token("}")
             }
             case _ => print(source, Some(node))
@@ -677,7 +677,7 @@ class CodeGenerator(
       if (res._2 < specifiers.length) {
         token("{")
         space()
-        printList(specifiers.drop(res._2), node, PrintListOptions(None, None, None, None))
+        printList(specifiers.drop(res._2), node, PrintSequenceOptions())
         space()
         token("}")
       }
@@ -696,7 +696,7 @@ class CodeGenerator(
           print(Some(source), Some(node), true)
           space()
           word("assert"); space(); token("{"); space()
-          printList(value, node, PrintListOptions(None, None, None, None))
+          printList(value, node, PrintSequenceOptions())
           space(); token("}")
         }
         case None => print(Some(source), Some(node))
@@ -736,7 +736,7 @@ class CodeGenerator(
     }
     case TSTypeParameterInstantiation(params) => {
       token("<")
-      printList(params, node, PrintListOptions(None, None, None, None))
+      printList(params, node, PrintSequenceOptions())
       // TODO: need parent
       token(">")
     }
@@ -916,7 +916,7 @@ class CodeGenerator(
     }
     case TSTupleType(element) => {
       token("[")
-      printList(element, node, PrintListOptions(None, None, None, None))
+      printList(element, node, PrintSequenceOptions())
       token("]")
     }
     case TSOptionalType(anno) => {
@@ -1009,7 +1009,7 @@ class CodeGenerator(
       ext match {
         case Some(value) if (value.length > 0) => {
           space(); word("extends"); space()
-          printList(value, node, PrintListOptions(None, None, None, None))
+          printList(value, node, PrintSequenceOptions())
         }
         case _ => ()
       }
