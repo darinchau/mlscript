@@ -4,6 +4,9 @@ import scala.util.matching.Regex
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import mlscript.codegen.{Position, Location, LocationType}
 import mlscript.codegen.ast.{Comment, CommentKind, CommentType, Node}
+import mlscript.codegen.ast.NewExpression
+import mlscript.codegen.ast.CallExpression
+import mlscript.codegen.ast.MemberExpression
 
 class NewLineState(var printed: Boolean)
 
@@ -259,12 +262,12 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     }
 
   private def _maybeAddParen(str: String): Unit =
-    if (!_parenPushNewlineState.isEmpty) {
+    if (_parenPushNewlineState.isDefined) {
       val len = str.length()
       val noSpaceIndex = str.indexWhere((c) => c != ' ')
-      if (noSpaceIndex < len) {
+      if (noSpaceIndex != -1) {
         val char = str.charAt(noSpaceIndex)
-        if (char == '\n') {
+        if (char != '\n') {
           if (char != '/' || noSpaceIndex + 1 == len)
             _parenPushNewlineState = None
           else {
@@ -696,12 +699,22 @@ object Printer {
     node: Option[Node],
     parent: Option[Node],
     printStack: Option[Array[Node]]
-  ): Boolean = if (parent.isEmpty) false
-      else {
-        // TODO: check node type
-        // @ see index.ts line 114
-        ???
+  ): Boolean = parent match {
+    case None => false
+    case Some(value) => value match {
+      case NewExpression(callee, args) => node match {
+        case Some(value) if (value == callee && isOrHasCallExpression(value)) /* Is it correct? */ => true
+        case _ => false // TODO: find @see index.ts line 119
       }
+      case _ => false // TODO: find @see index.ts line 119
+    }
+  }
+
+  private def isOrHasCallExpression(node: Node): Boolean = node match {
+    case ce: CallExpression => true
+    case MemberExpression(obj, _, _, _) => isOrHasCallExpression(obj)
+    case _ => false
+  }
 
   type PrintJoinOptions = PrintListOptions & PrintSequenceOptions
 

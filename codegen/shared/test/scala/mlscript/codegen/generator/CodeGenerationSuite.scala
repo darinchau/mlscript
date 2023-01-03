@@ -20,6 +20,10 @@ class CodeGenerationSuite extends munit.FunSuite:
 
   test("Code Generation - Base") {
     {
+      val res = CodeGenerator(Placeholder(PlaceholderExpectedNode.Statement, Identifier("bar")(None, None, None))(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "%%bar%%;")
+    }
+    {
       val res = CodeGenerator(InterpreterDirective("foo")(None, None, None), format, sourceMap).generate()
       assertEquals(res.code, "#!foo")
     }
@@ -29,12 +33,30 @@ class CodeGenerationSuite extends munit.FunSuite:
   }
   test("Code Generation - Expression") {
     {
+      val res = CodeGenerator(ConditionalExpression(Identifier("foo")(None, None, None),
+        Identifier("bar")(None, None, None),
+        Identifier("baz")(None, None, None))(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "foo ? bar : baz")
+    }
+    {
+      val res = CodeGenerator(Decorator(Identifier("dec")(None, None, None))(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "@dec")
+    }
+    {
+      val res = CodeGenerator(AwaitExpression(Identifier("stuck")(None, None, None))(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "await stuck")
+    }
+    {
       val res = CodeGenerator(ThisExpression()(None, None, None), format, sourceMap).generate()
       assertEquals(res.code, "this")
     }
     {
       val res = CodeGenerator(EmptyStatement()(None, None, None), format, sourceMap).generate()
       assertEquals(res.code, ";")
+    }
+    {
+      val res = CodeGenerator(PrivateName(Identifier("rua")(None, None, None))(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "#rua")
     }
   }
   test("Code Generation - Flow") {

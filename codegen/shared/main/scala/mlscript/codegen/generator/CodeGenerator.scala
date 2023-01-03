@@ -189,7 +189,7 @@ class CodeGenerator(
       token("</")
       token(">")
     // END jsx.ts
-    
+
     // BEGIN flow.ts
     case AnyTypeAnnotation() => word("any")
     case BooleanTypeAnnotation() => word("boolean")
@@ -1151,6 +1151,7 @@ class CodeGenerator(
       word("export"); space(); token("as"); space(); word("namespace"); space()
       print(Some(id), Some(node))
     }
+    case Identifier(name) => word(name)
     case _ => () // TODO
 
   def generate() = super.generate(ast)
