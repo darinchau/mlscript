@@ -3,10 +3,7 @@ package mlscript.codegen.generator
 import scala.util.matching.Regex
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import mlscript.codegen.{Position, Location, LocationType}
-import mlscript.codegen.ast.{Comment, CommentKind, CommentType, Node}
-import mlscript.codegen.ast.NewExpression
-import mlscript.codegen.ast.CallExpression
-import mlscript.codegen.ast.MemberExpression
+import mlscript.codegen.ast._
 
 class NewLineState(var printed: Boolean)
 
@@ -346,7 +343,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         if (forceParens) true
         else if (format.retainFunctionParens)
           node match {
-            case exp: Node // TODO: FunctionExpression
+            case exp @ FunctionExpression(_, _, _, _, _)
               if (!exp.extra.isEmpty && exp.extra.get.contains("parenthesized")) => true 
             case _ => false
           }
@@ -361,8 +358,8 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
       _printLeadingComments(node, parent)
 
       val loc: Option[Location] = node match {
-        case program: mlscript.codegen.ast.Program => None // TODO: nodeType === "Program"
-        case file: mlscript.codegen.ast.File => None // TODO: nodeType === "File"
+        case program: Program => None
+        case file: File => None
         case node => node.location
       }
 
@@ -456,9 +453,11 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     if (needIndent) dedent()
   }
 
-  // TODO:
-  // @see printer.ts line 789
-  def printBlock(parent: Node): Unit = ???
+  def printBlock(parent: Node with BlockParent): Unit = ??? // TODO: move body to BlockParent
+  /*parent.body match {
+    case es: EmptyStatement => { space(); print(Some(es), Some(parent)) }
+    case _ => print(Some(parent.body), Some(parent))
+  }*/
 
   private def _printTrailingComments(node: Node, parent: Option[Node], lineOffset: Int = 0) = {
     val innerComments = node.innerComments

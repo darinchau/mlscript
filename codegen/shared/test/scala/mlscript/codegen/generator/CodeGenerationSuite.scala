@@ -59,6 +59,11 @@ class CodeGenerationSuite extends munit.FunSuite:
       val res = CodeGenerator(PrivateName(Identifier("rua")(None, None, None))(None, None, None), format, sourceMap).generate()
       assertEquals(res.code, "#rua")
     }
+    {
+      val res = CodeGenerator(CallExpression(Identifier("foo")(None, None, None),
+        List(Identifier("bar")(None, None, None), Identifier("baz")(None, None, None)))(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "foo(bar, baz, )")
+    }
   }
   test("Code Generation - Flow") {
     {
