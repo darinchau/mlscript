@@ -75,6 +75,12 @@ class CodeGenerationSuite extends munit.FunSuite:
   }
   test("Code Generation - JSX") {
     {
+      val res = CodeGenerator(JSXFragment(JSXOpeningFragment()(None, None, None),
+        JSXClosingFragment()(None, None, None),
+        List(JSXText("foo")(None, None, None)))(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "<>foo</>")
+    }
+    {
       val res = CodeGenerator(JSXClosingFragment()(None, None, None), format, sourceMap).generate()
       assertEquals(res.code, "</>")
     }
@@ -88,4 +94,12 @@ class CodeGenerationSuite extends munit.FunSuite:
   test("Code Generation - Types") {
   }
   test("Code Generation - TypeScript") {
+    {
+      val res = CodeGenerator(TSEnumDeclaration(
+        Identifier("foo")(None, None, None),
+        List(TSEnumMember(Identifier("bar")(None, None, None))(None, None, None),
+          TSEnumMember(Identifier("baz")(None, None, None))(None, None, None))
+      )(None, None, None), format, sourceMap).generate()
+      assertEquals(res.code, "enum foo {bar,baz,}")
+    }
   }
