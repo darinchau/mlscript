@@ -10,7 +10,7 @@ class CodeGenerator(
   sourceMap: SourceMapBuilder
 ) extends Printer(format, sourceMap):
 
-  override def print(node: Node): Unit = node match
+  override def print(node: Node, parent: Option[Node]): Unit = node match
     // BEGIN classes.ts
     case node @ ClassDeclaration(id, superClass, body, decorators) =>
       printJoin(decorators, node, PrintSequenceOptions())
@@ -394,15 +394,21 @@ class CodeGenerator(
     case ne @ NewExpression(callee, args) => {
       word("new"); space()
       print(Some(callee), Some(node))
-      // if (!format.minified || args.length > 0 || ne.optional)
-      // TODO: need parent
-
-      // TODO: seems not correct here yet
-      // print(Some(ne.typeArguments), Some(ne))
-      // print(Some(ne.typeParameters), Some(ne))
-      token("(")
-      printList(args, ne, PrintSequenceOptions())
-      token(")")
+      def run() = {
+        // TODO: seems not correct here yet
+        // print(Some(ne.typeArguments), Some(ne))
+        // print(Some(ne.typeParameters), Some(ne))
+        token("(")
+        printList(args, ne, PrintSequenceOptions())
+        token(")")
+      }
+      parent match {
+        case Some(CallExpression(callee, _)) if (callee.equals(ne)) => run()
+        case Some(m: MemberExpression) => run()
+        case Some(ne: NewExpression) => run()
+        case _ if (!format.minified || args.length > 0) => run()
+        case _ => ()
+      }
     }
     case SequenceExpression(exps) =>
       printList(exps, node, PrintSequenceOptions())
@@ -490,7 +496,7 @@ class CodeGenerator(
     }
     case AssignmentExpression(op, left, right) => {
       val parens = inForStatementInitCounter > 0 &&
-        op.equals("in") // TODO: need parent && Printer.needsParens(Some(node))
+        op.equals("in") && Printer.needsParens(Some(node), parent, None)
       if (parens) token("(")
       print(Some(left), Some(node))
       space()
@@ -717,7 +723,15 @@ class CodeGenerator(
       print(Some(quasi), Some(node))
     }
     case TemplateElement(value, tail) => {
-      // TODO: need parent
+      val pos = parent match {
+        case Some(TemplateLiteral(quasis, _)) =>
+          (quasis.head.equals(node), quasis.last.equals(node))
+        case _ => throw new AssertionError("wrong parent type of TemplateElement") // This should not happen
+      }
+
+      // TODO: value.raw?
+      val tok = (if (pos._1) "`" else "}") + value.toString() + (if (pos._2) "`" else "${")
+      token(tok)
     }
     case TemplateLiteral(quasis, expressions) => {
       quasis.iterator.zipWithIndex.foreach((q, i) => {
@@ -733,7 +747,11 @@ class CodeGenerator(
     case TSTypeParameterInstantiation(params) => {
       token("<")
       printList(params, node, PrintSequenceOptions())
-      // TODO: need parent
+      parent match {
+        case Some(ArrowFunctionExpression(params, _, _, _)) if (params.length == 1) =>
+          token(",")
+        case _ => () 
+      }
       token(">")
     }
     case tp @ TSTypeParameter(constraint, default, name) => {

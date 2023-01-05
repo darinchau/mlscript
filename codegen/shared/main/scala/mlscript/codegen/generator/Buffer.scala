@@ -206,10 +206,10 @@ class Buffer(map: Option[SourceMapBuilder], printer: Printer) {
     if (!map.isEmpty) normalizePosition(prop, loc, lineOffset, columnOffset)
 
   def withSource(prop: LocationType, loc: Option[Location], node: Node, parent: Node, printer: Printer): Unit =
-    if (map.isEmpty) printer.print(parent)
+    if (map.isEmpty) printer.print(node, Some(parent))
     else {
       source(prop, loc)
-      printer.print(parent)
+      printer.print(node, Some(parent))
     }
 
   private def normalizePosition(

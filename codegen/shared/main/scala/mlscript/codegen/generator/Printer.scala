@@ -47,7 +47,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private var _lastCommentLine = 0
   protected var inForStatementInitCounter = 0
 
-  def print(node: Node): Unit
+  def print(node: Node, parent: Option[Node]): Unit
 
   def generate(ast: Node): BufferOutput = {
     print(Some(ast))
@@ -165,7 +165,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     buf.removeTrailingNewline()
 
   def exactSource(loc: Option[Location], node: Node, parent: Option[Node]): Unit = {
-    if (loc.isEmpty) print(node)
+    if (loc.isEmpty) print(node, parent)
     else {
       _catchUp(LocationType.Start, loc)
       buf.exactSource(loc, node, parent, this)
@@ -193,7 +193,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     loc: Option[Location],
     node: Node,
     parent: Node
-  ): Unit = if (loc.isEmpty) print(parent)
+  ): Unit = if (loc.isEmpty) print(node, Some(parent))
       else {
         _catchUp(prop, loc)
         buf.withSource(prop, loc, node, parent, this)

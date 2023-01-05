@@ -17,7 +17,7 @@ class BufferSuite extends munit.FunSuite:
     
     def shouldPrintComment(comment: String): Boolean = false
   }, new SourceMapBuilder(None, None, Left(""))) {
-    def print(node: Node): Unit = ()
+    def print(node: Node, parent: Option[Node]): Unit = ()
   }
   test("Buffer Output - queue") {
     val buffer = new Buffer(None, printer)
