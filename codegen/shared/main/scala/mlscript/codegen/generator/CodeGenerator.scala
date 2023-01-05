@@ -570,7 +570,6 @@ class CodeGenerator(
       print(Some(source), Some(node))
     }
     case dec @ ExportNamedDeclaration(declaration, specifiers, source) => {
-      // TODO: process.env.BABEL_8_BREAKING
       word("export"); space()
       declaration match {
         case Some(value) => {
@@ -633,7 +632,6 @@ class CodeGenerator(
       semicolon()
     }
     case ExportDefaultDeclaration(declaration) => {
-      // TODO: process.env.BABEL_8_BREAKING
       word("export")
       noIndentInneerCommentsHere()
       space(); word("default"); space()
@@ -704,7 +702,6 @@ class CodeGenerator(
         case None => print(Some(source), Some(node))
       }
 
-      // TODO: process.env.BABEL_8_BREAKING
       semicolon()
     }
     case ImportAttribute(key, value) => {
@@ -761,7 +758,9 @@ class CodeGenerator(
       if (tp.out.getOrElse(false)) {
         word("out"); space()
       }
-      // TODO process.env.BABEL_8_BREAKING
+      
+      word(name)
+      
       if (constraint.isDefined) {
         space(); word("extends"); space()
         print(constraint, Some(node))
@@ -812,7 +811,7 @@ class CodeGenerator(
       token("(")
       // TODO: _parameters(parameters, node)
       token(")")
-      // TODO: process.env.BABEL_8_BREAKING
+      // TODO: No return type found
       print(anno, Some(node))
       token(";")
     }
@@ -822,7 +821,7 @@ class CodeGenerator(
       token("(")
       // TODO: _parameters(parameters, node)
       token(")")
-      // TODO: process.env.BABEL_8_BREAKING
+      // TODO: No return type found
       print(anno, Some(node))
       token(";")
     }
@@ -857,7 +856,7 @@ class CodeGenerator(
       token("(")
       // TODO: _parameters(parameters, node)
       token(")")
-      // TODO: process.env.BABEL_8_BREAKING
+      // TODO: No return type found
       print(anno, Some(node))
 
       token(";")
@@ -876,12 +875,11 @@ class CodeGenerator(
       token(";")
     }
     case TSFunctionType(tp, params, anno) => {
-      // TODO: process.env.BABEL_8_BREAKING
       print(tp, Some(node))
       token("(")
       // TODO: _parameters(parameters, node)
       token(")"); space(); token("=>"); space()
-      // TODO: process.env.BABEL_8_BREAKING
+      // TODO: No return type found
       print(anno, Some(node))
     }
     case ct @ TSConstructorType(tp, params, anno) => {
@@ -895,7 +893,7 @@ class CodeGenerator(
       token("(")
       // TODO: _parameters(parameters, node)
       token(")"); space(); token("=>"); space()
-      // TODO: process.env.BABEL_8_BREAKING
+      // TODO: No return type found
       print(anno, Some(node))
     }
     case TSTypeReference(name, tp) => {
@@ -990,7 +988,10 @@ class CodeGenerator(
       }
 
       token("[")
-      // TODO: process.env.BABEL_8_BREAKING
+      name match {
+        case Some(Identifier(name)) => word(name)
+        case _ => ()
+      }
       space(); word("in"); space()
       print(tp.constraint, Some(tp))
       if (name.isDefined) {
