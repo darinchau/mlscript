@@ -30,27 +30,24 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private val HAS_BlOCK_COMMENT_END = "\\*\\/".r
   private val SCIENTIFIC_NOTATION = "e\\d".r
 
-  private var indentLevel: Int = 0
   private val buf = new Buffer(Some(map), this)
+  private val indentString = format.indent
+
+  private var indentLevel: Int = 0
   private var _noLineTerminator = false
   private var _endsWithWord = false
-  private val indentString = format.indent
   private var _endsWithInteger = false
   private var _endWithInnerRaw = false
   private var _indentInnerComments = true
   private var _parenPushNewlineState: Option[NewLineState] = None
-  private var _printAuxAfterOnNextUserNode = false
   private var _printStack = new ArrayBuffer[Node]()
   private var _printedComments = new HashSet[Comment]()
-  private var _insideAux = false
   private var _lastCommentLine = 0
 
   def print(node: Node, parent: Option[Node])(implicit inForStatementInitCounter: Int): Unit
 
   def generate(ast: Node): BufferOutput = {
     print(Some(ast))(0)
-    _maybeAddAuxComment()
-
     buf.get()
   }
 
@@ -61,7 +58,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     if (!format.compact && !format.concise) indentLevel -= 1
 
   def semicolon(force: Boolean = false): Unit = {
-    _maybeAddAuxComment()
     if (force) appendChar(';')
     else queue(';')
 
@@ -88,7 +84,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     if (_endsWithWord || (str.charAt(0) == '/' && endsWith('/')))
       space()
 
-    _maybeAddAuxComment()
     _append(str, false)
 
     _endsWithWord = true
@@ -122,7 +117,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         (strFirst == '.' && _endsWithInteger))
       queue(' ')
 
-    _maybeAddAuxComment()
     _append(str, maybeNewline)
     _noLineTerminator = false
   }
@@ -136,7 +130,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         (char == '.' && lastChar == '.'))
       queue(' ')
 
-    _maybeAddAuxComment()
     appendChar(char)
     _noLineTerminator = false
   }
@@ -333,9 +326,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
       if (node.compact) format.concise = true
 
       _printStack = _printStack :+ (node)
-      val oldAux = _insideAux
-      _insideAux = node.location.isEmpty
-      _maybeAddAuxComment(oldAux && _insideAux)
 
       val shouldPrintParens: Boolean =
         if (forceParens) true
@@ -378,28 +368,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
       _printStack.dropRightInPlace(1)
       format.concise = oldConcise
-      _insideAux = oldAux
       _endWithInnerRaw = false
-
-  private def _maybeAddAuxComment(enteredPositionlessNode: Boolean = false): Unit =
-    if (enteredPositionlessNode) _printAuxBeforeComment()
-    else _printAuxAfterComment()
-
-  private def _printAuxBeforeComment(): Unit =
-    if (!_printAuxAfterOnNextUserNode) {
-      _printAuxAfterOnNextUserNode = true
-      if (!format.auxiliaryCommentBefore.isEmpty) {
-        _printComment(Comment(format.auxiliaryCommentBefore), CommentSkipNewLine.Default)
-      }
-    }
-
-  private def _printAuxAfterComment(): Unit =
-    if (!_printAuxAfterOnNextUserNode) {
-      _printAuxAfterOnNextUserNode = true
-      if (!format.auxiliaryCommentAfter.isEmpty) {
-        _printComment(Comment(format.auxiliaryCommentAfter), CommentSkipNewLine.Default)
-      }
-    }
 
   // TODO: Exact node type
   def getPossibleRaw(node: Node): Option[String] =

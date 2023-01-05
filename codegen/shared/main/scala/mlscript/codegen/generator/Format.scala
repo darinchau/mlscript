@@ -5,8 +5,6 @@ trait Format {
   val minified: Boolean
   var concise: Boolean
   val retainLines: Boolean
-  val auxiliaryCommentBefore: String
-  val auxiliaryCommentAfter: String
   val adjustMultilineComment: Boolean
   val retainFunctionParens: Boolean
   val indent: String
