@@ -45,12 +45,11 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private var _printedComments = new HashSet[Comment]()
   private var _insideAux = false
   private var _lastCommentLine = 0
-  protected var inForStatementInitCounter = 0
 
-  def print(node: Node, parent: Option[Node]): Unit
+  def print(node: Node, parent: Option[Node])(implicit inForStatementInitCounter: Int): Unit
 
   def generate(ast: Node): BufferOutput = {
-    print(Some(ast))
+    print(Some(ast))(0)
     _maybeAddAuxComment()
 
     buf.get()
@@ -164,7 +163,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   def removeTrailingNewline: Unit = 
     buf.removeTrailingNewline()
 
-  def exactSource(loc: Option[Location], node: Node, parent: Option[Node]): Unit = {
+  def exactSource(loc: Option[Location], node: Node, parent: Option[Node])(implicit inForStatementInitCounter: Int): Unit = {
     if (loc.isEmpty) print(node, parent)
     else {
       _catchUp(LocationType.Start, loc)
@@ -193,7 +192,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     loc: Option[Location],
     node: Node,
     parent: Node
-  ): Unit = if (loc.isEmpty) print(node, Some(parent))
+  )(implicit inForStatementInitCounter: Int): Unit = if (loc.isEmpty) print(node, Some(parent))
       else {
         _catchUp(prop, loc)
         buf.withSource(prop, loc, node, parent, this)
@@ -304,7 +303,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
           }
         case None => ()
 
-  def printTerminatorless(node: Node, parent: Node, isLabel: Boolean): Unit =
+  def printTerminatorless(node: Node, parent: Node, isLabel: Boolean)(implicit inForStatementInitCounter: Int): Unit =
     if (isLabel) {
       _noLineTerminator = true
       print(Some(node), Some(parent))
@@ -327,7 +326,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     noLineTerminatorAfter: Boolean = false,
     trailingCommentsLineOffset: Int = 0,
     forceParens: Boolean = false
-  ): Unit = node match
+  )(implicit inForStatementInitCounter: Int): Unit = node match
     case None => ()
     case Some(node) =>
       _endWithInnerRaw = false
@@ -411,7 +410,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         case _ => None
       case None => None
 
-  def printJoin[T <: Node](nodes: Option[List[T]], parent: Node, opts: PrintSequenceOptions): Unit =
+  def printJoin[T <: Node](nodes: Option[List[T]], parent: Node, opts: PrintSequenceOptions)(implicit inForStatementInitCounter: Int): Unit =
     nodes match {
       case Some(nodes) if (nodes.length > 0) => {
         if (!opts.indent.isEmpty) indent()
@@ -455,7 +454,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
       case _ => ()
     }
 
-  def printAndIndentOnComments(node: Node, parent: Node) = {
+  def printAndIndentOnComments(node: Node, parent: Node)(implicit inForStatementInitCounter: Int) = {
     val needIndent: Boolean =
       !node.leadingComments.isEmpty && node.leadingComments.get.length > 0
     if (needIndent) indent()
@@ -509,14 +508,14 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   def noIndentInneerCommentsHere(): Unit = _indentInnerComments = false
 
-  def printSequence[T <: Node](nodes: List[T], parent: Node, opts: PrintSequenceOptions): Unit = {
+  def printSequence[T <: Node](nodes: List[T], parent: Node, opts: PrintSequenceOptions)(implicit inForStatementInitCounter: Int): Unit = {
     val newOpts = PrintSequenceOptions(statement = Some(true), indent = opts.indent,
       trailingCommentsLineOffset = opts.trailingCommentsLineOffset,
       nextNodeStartLine = opts.nextNodeStartLine, addNewlines = opts.addNewlines)
     printJoin(Some(nodes), parent, newOpts)
   }
 
-  def printList(items: List[Node], parent: Node, opts: PrintSequenceOptions): Unit = {
+  def printList(items: List[Node], parent: Node, opts: PrintSequenceOptions)(implicit inForStatementInitCounter: Int): Unit = {
     val newOpts = PrintSequenceOptions(separator = Some(opts.separator.getOrElse(Printer.commaSeparator)),
       iterator = opts.iterator, statement = opts.statement, indent = opts.indent)
     printJoin(Some(items), parent, newOpts)

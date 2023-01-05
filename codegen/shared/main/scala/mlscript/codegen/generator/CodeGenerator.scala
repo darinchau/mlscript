@@ -10,7 +10,7 @@ class CodeGenerator(
   sourceMap: SourceMapBuilder
 ) extends Printer(format, sourceMap):
 
-  override def print(node: Node, parent: Option[Node]): Unit = node match
+  override def print(node: Node, parent: Option[Node])(implicit inForStatementInitCounter: Int): Unit = node match
     // BEGIN classes.ts
     case node @ ClassDeclaration(id, superClass, body, decorators) =>
       printJoin(decorators, node, PrintSequenceOptions())
@@ -1171,7 +1171,7 @@ class CodeGenerator(
 
   def generate() = super.generate(ast)
 
-  private def tsPrintBraced(members: List[Node], node: Node) = {
+  private def tsPrintBraced(members: List[Node], node: Node)(implicit inForStatementInitCounter: Int) = {
     token("{")
     if (members.length > 0) {
       indent()
@@ -1187,7 +1187,7 @@ class CodeGenerator(
     rightBrace()
   }
 
-  private def tsPrintUnionOrIntersectionType(types: List[Node], node: Node, sep: String) =
+  private def tsPrintUnionOrIntersectionType(types: List[Node], node: Node, sep: String)(implicit inForStatementInitCounter: Int) =
     printJoin(Some(types), node, PrintSequenceOptions(
       separator = Some((p: Printer) => { p.space(); p.token(sep); p.space(); })
     ))
