@@ -34,7 +34,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private val buf = new Buffer(Some(map), this)
   private var _noLineTerminator = false
   private var _endsWithWord = false
-  private var _endWithInteger = false
   private val indentString = format.indent
   private var _endsWithInteger = false
   private var _endWithInnerRaw = false
@@ -120,7 +119,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         (strFirst == '+' && lastChar == '+') ||
         (strFirst == '-' && lastChar == '-') ||
         // Needs spaces to avoid changing '34' to '34.', which would still be a valid number.
-        (strFirst == '.' && _endWithInteger))
+        (strFirst == '.' && _endsWithInteger))
       queue(' ')
 
     _maybeAddAuxComment()
@@ -215,7 +214,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     buf.appendChar(char)
 
     _endsWithWord = false
-    _endWithInteger = false
+    _endsWithInteger = false
   }
 
   private def queue(char: Char): Unit = {
@@ -225,7 +224,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     buf.queue(char)
 
     _endsWithWord = false
-    _endWithInteger = false
+    _endsWithInteger = false
   }
 
   private def _maybeIndent(firstChar: Char): Unit =
