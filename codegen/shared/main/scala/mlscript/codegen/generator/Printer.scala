@@ -505,7 +505,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     }
   }
 
-  def noIndentInneerCommentsHere(): Unit = _indentInnerComments = false
+  def noIndentInnerCommentsHere(): Unit = _indentInnerComments = false
 
   def printSequence[T <: Node](nodes: List[T], parent: Node, opts: PrintSequenceOptions)(implicit inForStatementInitCounter: Int): Unit = {
     val newOpts = PrintSequenceOptions(statement = Some(true), indent = opts.indent,

@@ -291,7 +291,7 @@ class CodeGenerator(
       print(Some(program), Some(node))
     }
     case Program(body, directives, _, _, _) => {
-      noIndentInneerCommentsHere()
+      noIndentInnerCommentsHere()
       printInnerComments()
       if (directives.length > 0) {
         val newlines = if (body.length > 0) 2 else 1
@@ -633,7 +633,7 @@ class CodeGenerator(
     }
     case ExportDefaultDeclaration(declaration) => {
       word("export")
-      noIndentInneerCommentsHere()
+      noIndentInnerCommentsHere()
       space(); word("default"); space()
       print(Some(declaration), Some(node))
       declaration match {
@@ -645,15 +645,15 @@ class CodeGenerator(
       word("import"); space()
       dec.importKind match {
         case Some(ImportKind.Type) => {
-          noIndentInneerCommentsHere()
+          noIndentInnerCommentsHere()
           word("type"); space()
         }
         case Some(ImportKind.TypeOf) => {
-          noIndentInneerCommentsHere()
+          noIndentInnerCommentsHere()
           word("typeof"); space()
         }
         case _ if (dec.module.isDefined) => {
-          noIndentInneerCommentsHere()
+          noIndentInnerCommentsHere()
           word("module"); space()
         }
         case _ => ()
