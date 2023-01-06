@@ -5,8 +5,6 @@ import scala.collection.mutable.{ArrayBuffer, HashSet}
 import mlscript.codegen.{Position, Location, LocationType}
 import mlscript.codegen.ast._
 
-class NewLineState(var printed: Boolean)
-
 case class AddNewlineOptions(
   val nextNodeStartLine: Int,
   val addNewlines: (Boolean, Node) => Int
@@ -22,6 +20,14 @@ case class PrintSequenceOptions(
   val iterator: Option[(Node, Int) => Unit] = None
 )
 
+case class PrinterOptions(
+  val inForStatementInitCounter: Int = 0,
+  val printStack: Array[Node] = Array()
+) {
+  def derive(inFor: Int = inForStatementInitCounter, ps: Array[Node] = printStack): PrinterOptions
+    = PrinterOptions(inFor, ps)
+}
+
 abstract class Printer(format: Format, map: SourceMapBuilder) {
   private val PURE_ANNOTATION_RE = "^\\s*[@#]__PURE__\\s*$".r
   private val ZERO_DECIMAL_INTEGER = "\\.0+$".r
@@ -32,22 +38,22 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   private val buf = new Buffer(Some(map), this)
   private val indentString = format.indent
+  private val printedComments = new HashSet[Comment]()
 
   private var indentLevel: Int = 0
+  
   private var _noLineTerminator = false
   private var _endsWithWord = false
   private var _endsWithInteger = false
   private var _endWithInnerRaw = false
   private var _indentInnerComments = true
-  private var _parenPushNewlineState: Option[NewLineState] = None
-  private var _printStack = new ArrayBuffer[Node]()
-  private var _printedComments = new HashSet[Comment]()
+  private var _parenPushNewlineState: Option[Boolean] = None
   private var _lastCommentLine = 0
 
-  def print(node: Node, parent: Option[Node])(implicit inForStatementInitCounter: Int): Unit
+  def print(node: Node, parent: Option[Node])(implicit options: PrinterOptions): Unit
 
   def generate(ast: Node): BufferOutput = {
-    print(Some(ast))(0)
+    print(Some(ast))(PrinterOptions())
     buf.get()
   }
 
@@ -57,19 +63,19 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   def dedent(): Unit =
     if (!format.compact && !format.concise) indentLevel -= 1
 
-  def semicolon(force: Boolean = false): Unit = {
+  def semicolon(force: Boolean = false)(implicit options: PrinterOptions): Unit = {
     if (force) appendChar(';')
     else queue(';')
 
     _noLineTerminator = false
   }
 
-  def rightBrace(): Unit = {
+  def rightBrace()(implicit options: PrinterOptions): Unit = {
     if (format.minified) buf.removeLastSemicolon()
     token("}")
   }
 
-  def space(force: Boolean = false): Unit =
+  def space(force: Boolean = false)(implicit options: PrinterOptions): Unit =
     if (!format.compact) {
       if (force) queue(' ')
       else if (buf.hasContent) {
@@ -79,8 +85,9 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
       }
     }
 
-  def word(str: String, noLineTerminatorAfter: Boolean = false): Unit = {
+  def word(str: String, noLineTerminatorAfter: Boolean = false)(implicit options: PrinterOptions): Unit = {
     _maybePrintInnerComments()
+    // prevent concatenating words and creating // comment out of division and regex
     if (_endsWithWord || (str.charAt(0) == '/' && endsWith('/')))
       space()
 
@@ -90,7 +97,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     _noLineTerminator = noLineTerminatorAfter
   }
 
-  def number(str: String): Unit = {
+  def number(str: String)(implicit options: PrinterOptions): Unit = {
     word(str)
 
     _endsWithInteger =
@@ -101,7 +108,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
       str.last != '.'
   }
 
-  def token(str: String, maybeNewline: Boolean = false): Unit = {
+  def token(str: String, maybeNewline: Boolean = false)(implicit options: PrinterOptions): Unit = {
     _maybePrintInnerComments()
 
     val lastChar = getLastChar()
@@ -121,7 +128,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     _noLineTerminator = false
   }
 
-  def tokenChar(char: Char): Unit = {
+  def tokenChar(char: Char)(implicit options: PrinterOptions): Unit = {
     _maybePrintInnerComments()
     val lastChar = getLastChar()
 
@@ -134,7 +141,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     _noLineTerminator = false
   }
 
-  def newline(i: Int = 1, force: Boolean = false): Unit =
+  def newline(i: Int = 1, force: Boolean = false)(implicit options: PrinterOptions): Unit =
     if (i > 0) {
       if (!force && !format.retainLines && !format.compact && format.concise)
         space()
@@ -152,10 +159,10 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   def endsWithCharAndNewline: Option[Char] =
     buf.endsWithCharAndNewline
 
-  def removeTrailingNewline: Unit = 
+  def removeTrailingNewline(): Unit = 
     buf.removeTrailingNewline()
 
-  def exactSource(loc: Option[Location], node: Node, parent: Option[Node])(implicit inForStatementInitCounter: Int): Unit = {
+  def exactSource(loc: Option[Location], node: Node, parent: Option[Node])(implicit options: PrinterOptions): Unit = {
     if (loc.isEmpty) print(node, parent)
     else {
       _catchUp(LocationType.Start, loc)
@@ -163,7 +170,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     }
   }
 
-  def source(prop: LocationType, loc: Option[Location]): Unit =
+  def source(prop: LocationType, loc: Option[Location])(implicit options: PrinterOptions): Unit =
     if (!loc.isEmpty) {
       _catchUp(prop, loc)
       buf.source(prop, loc)
@@ -174,7 +181,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     loc: Option[Location],
     lineOffset: Int,
     columnOffset: Int
-  ): Unit = if (!loc.isEmpty) {
+  )(implicit options: PrinterOptions): Unit = if (!loc.isEmpty) {
     _catchUp(prop, loc)
     buf.sourceWithOffset(prop, loc, lineOffset, columnOffset)
   }
@@ -184,13 +191,13 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     loc: Option[Location],
     node: Node,
     parent: Node
-  )(implicit inForStatementInitCounter: Int): Unit = if (loc.isEmpty) print(node, Some(parent))
+  )(implicit options: PrinterOptions): Unit = if (loc.isEmpty) print(node, Some(parent))
       else {
         _catchUp(prop, loc)
         buf.withSource(prop, loc, node, parent, this)
       }
 
-  private def _append(str: String, maybeNewline: Boolean): Unit = {
+  private def _append(str: String, maybeNewline: Boolean)(implicit options: PrinterOptions): Unit = {
     _maybeAddParen(str)
     _maybeIndent(str.charAt(0))
 
@@ -200,7 +207,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     _endsWithInteger = false
   }
 
-  private def appendChar(char: Char): Unit = {
+  private def appendChar(char: Char)(implicit options: PrinterOptions): Unit = {
     _maybeAddParenChar(char)
     _maybeIndent(char)
 
@@ -210,7 +217,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     _endsWithInteger = false
   }
 
-  private def queue(char: Char): Unit = {
+  private def queue(char: Char)(implicit options: PrinterOptions): Unit = {
     _maybeAddParenChar(char)
     _maybeIndent(char)
 
@@ -221,26 +228,24 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   }
 
   private def _maybeIndent(firstChar: Char): Unit =
-    if (indentLevel > 0 &&
-        firstChar != '\n' &&
-        endsWith('\n'))
+    if (shouldIndent(firstChar))
       buf.queueIndentation(indentString.charAt(0), indentLevel * indentString.length())
 
-  private def _shouldIndent(firstChar: Char) =
+  private def shouldIndent(firstChar: Char) =
     indentLevel > 0 && firstChar != '\n' && endsWith('\n')
 
-  private def _maybeAddParenChar(char: Char): Unit =
-    if (!_parenPushNewlineState.isEmpty && char != ' ') {
+  private def _maybeAddParenChar(char: Char)(implicit options: PrinterOptions): Unit =
+    if (_parenPushNewlineState.isDefined && char != ' ') {
       if (char != '\n')
         _parenPushNewlineState = None
       else {
         token("(")
         indent()
-        _parenPushNewlineState.get.printed = true
+        _parenPushNewlineState = Some(true)
       }
     }
 
-  private def _maybeAddParen(str: String): Unit =
+  private def _maybeAddParen(str: String)(implicit options: PrinterOptions): Unit =
     if (_parenPushNewlineState.isDefined) {
       val len = str.length()
       val noSpaceIndex = str.indexWhere((c) => c != ' ')
@@ -256,7 +261,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
                 case None => {
                   token("(")
                   indent()
-                  _parenPushNewlineState.get.printed = true
+                  _parenPushNewlineState = Some(true)
                 }
                 case _ => ()
               }
@@ -267,25 +272,25 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
             else {
               token("(")
               indent()
-              _parenPushNewlineState.get.printed = true
+              _parenPushNewlineState = Some(true)
             }
           }
         }
         else {
           token("(")
           indent()
-          _parenPushNewlineState.get.printed = true
+          _parenPushNewlineState = Some(true)
         }
       }
     }
 
-  def catchUp(line: Int): Unit =
+  def catchUp(line: Int)(implicit options: PrinterOptions): Unit =
     if (format.retainLines && line > buf.getCurrentLine) {
       queue('\n')
       catchUp(line)
     }
 
-  private def _catchUp(prop: LocationType, optLoc: Option[Location]): Unit =
+  private def _catchUp(prop: LocationType, optLoc: Option[Location])(implicit options: PrinterOptions): Unit =
     if (format.retainLines)
       optLoc match
         case Some(loc) => 
@@ -295,17 +300,16 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
           }
         case None => ()
 
-  def printTerminatorless(node: Node, parent: Node, isLabel: Boolean)(implicit inForStatementInitCounter: Int): Unit =
+  def printTerminatorless(node: Node, parent: Node, isLabel: Boolean)(implicit options: PrinterOptions): Unit =
     if (isLabel) {
       _noLineTerminator = true
       print(Some(node), Some(parent))
     }
     else {
-      val terminatorState = new NewLineState(false)
-      _parenPushNewlineState = Some(terminatorState)
+      _parenPushNewlineState = Some(false)
       print(Some(node), Some(parent))
 
-      if (terminatorState.printed) {
+      if (_parenPushNewlineState.getOrElse(false)) {
         dedent()
         newline()
         token(")")
@@ -318,15 +322,14 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     noLineTerminatorAfter: Boolean = false,
     trailingCommentsLineOffset: Int = 0,
     forceParens: Boolean = false
-  )(implicit inForStatementInitCounter: Int): Unit = node match
+  )(implicit options: PrinterOptions): Unit = node match
     case None => ()
     case Some(node) =>
       _endWithInnerRaw = false
       val oldConcise = format.concise
       if (node.compact) format.concise = true
 
-      _printStack = _printStack :+ (node)
-
+      val printStack = options.printStack :+ node
       val shouldPrintParens: Boolean =
         if (forceParens) true
         else if (format.retainFunctionParens)
@@ -335,7 +338,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
               if (!exp.extra.isEmpty && exp.extra.get.contains("parenthesized")) => true 
             case _ => false
           }
-        else Printer.needsParens(Some(node), parent, Some(_printStack.toArray))
+        else Printer.needsParens(Some(node), parent, Some(printStack.toArray))
 
       if (shouldPrintParens) {
         token("(")
@@ -351,7 +354,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         case node => node.location
       }
 
-      exactSource(loc, node, parent)
+      exactSource(loc, node, parent)(options.derive(ps = printStack))
 
       if (shouldPrintParens) {
         _printTrailingComments(node, parent)
@@ -366,7 +369,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         _printTrailingComments(node, parent, trailingCommentsLineOffset)
       }
 
-      _printStack.dropRightInPlace(1)
       format.concise = oldConcise
       _endWithInnerRaw = false
 
@@ -378,7 +380,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
         case _ => None
       case None => None
 
-  def printJoin[T <: Node](nodes: Option[List[T]], parent: Node, opts: PrintSequenceOptions)(implicit inForStatementInitCounter: Int): Unit =
+  def printJoin[T <: Node](nodes: Option[List[T]], parent: Node, opts: PrintSequenceOptions)(implicit options: PrinterOptions): Unit =
     nodes match {
       case Some(nodes) if (nodes.length > 0) => {
         if (!opts.indent.isEmpty) indent()
@@ -422,7 +424,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
       case _ => ()
     }
 
-  def printAndIndentOnComments(node: Node, parent: Node)(implicit inForStatementInitCounter: Int) = {
+  def printAndIndentOnComments(node: Node, parent: Node)(implicit options: PrinterOptions) = {
     val needIndent: Boolean =
       !node.leadingComments.isEmpty && node.leadingComments.get.length > 0
     if (needIndent) indent()
@@ -430,13 +432,13 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     if (needIndent) dedent()
   }
 
-  def printBlock(parent: Node with BlockParent): Unit = ??? // TODO: move body to BlockParent
+  def printBlock(parent: Node with BlockParent)(implicit options: PrinterOptions): Unit = ??? // TODO: move body to BlockParent
   /*parent.body match {
     case es: EmptyStatement => { space(); print(Some(es), Some(parent)) }
     case _ => print(Some(parent.body), Some(parent))
   }*/
 
-  private def _printTrailingComments(node: Node, parent: Option[Node], lineOffset: Int = 0) = {
+  private def _printTrailingComments(node: Node, parent: Option[Node], lineOffset: Int = 0)(implicit options: PrinterOptions) = {
     val innerComments = node.innerComments
     if (!innerComments.isEmpty && innerComments.get.length > 0)
       _printComments(CommentType.Trailing, innerComments.get, node, parent, lineOffset)
@@ -446,29 +448,29 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
       _printComments(CommentType.Trailing, trailingComments.get, node, parent, lineOffset)
   }
 
-  private def _printLeadingComments(node: Node, parent: Option[Node]) = {
+  private def _printLeadingComments(node: Node, parent: Option[Node])(implicit options: PrinterOptions) = {
     val comments = node.leadingComments
     if (!comments.isEmpty && comments.get.length > 0)
       _printComments(CommentType.Leading, comments.get, node, parent)
   }
 
-  private def _maybePrintInnerComments(): Unit = {
+  private def _maybePrintInnerComments()(implicit options: PrinterOptions): Unit = {
     if (_endWithInnerRaw) printInnerComments()
 
     _endWithInnerRaw = true
     _indentInnerComments = true
   }
 
-  def printInnerComments(): Unit = {
-    val node = _printStack.last
+  def printInnerComments()(implicit options: PrinterOptions): Unit = {
+    val node = options.printStack.last
     val comments = node.innerComments
     if (comments.isDefined && comments.get.length > 0) {
       val hasSpace = endsWith(' ')
-      val printedCommentsCount = _printedComments.size
+      val printedCommentsCount = printedComments.size
       if (_indentInnerComments) indent()
 
       _printComments(CommentType.Inner, comments.get, node)
-      if (hasSpace && printedCommentsCount != _printedComments.size)
+      if (hasSpace && printedCommentsCount != printedComments.size)
         space()
       if (_indentInnerComments) dedent()
     }
@@ -476,20 +478,20 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   def noIndentInnerCommentsHere(): Unit = _indentInnerComments = false
 
-  def printSequence[T <: Node](nodes: List[T], parent: Node, opts: PrintSequenceOptions)(implicit inForStatementInitCounter: Int): Unit = {
+  def printSequence[T <: Node](nodes: List[T], parent: Node, opts: PrintSequenceOptions)(implicit options: PrinterOptions): Unit = {
     val newOpts = PrintSequenceOptions(statement = Some(true), indent = opts.indent,
       trailingCommentsLineOffset = opts.trailingCommentsLineOffset,
       nextNodeStartLine = opts.nextNodeStartLine, addNewlines = opts.addNewlines)
     printJoin(Some(nodes), parent, newOpts)
   }
 
-  def printList(items: List[Node], parent: Node, opts: PrintSequenceOptions)(implicit inForStatementInitCounter: Int): Unit = {
+  def printList(items: List[Node], parent: Node, opts: PrintSequenceOptions)(implicit options: PrinterOptions): Unit = {
     val newOpts = PrintSequenceOptions(separator = Some(opts.separator.getOrElse(Printer.commaSeparator)),
       iterator = opts.iterator, statement = opts.statement, indent = opts.indent)
     printJoin(Some(items), parent, newOpts)
   }
 
-  private def _printNewline(newline: Boolean, opts: AddNewlineOptions) = 
+  private def _printNewline(newline: Boolean, opts: AddNewlineOptions)(implicit options: PrinterOptions) = 
     if (!format.retainLines && !format.compact) {
       if (format.concise) space()
       else if (newline) {
@@ -505,17 +507,17 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 
   private def _shouldPrintComment(comment: Comment): PrintCommentHint =
     if (comment.ignore.getOrElse(false)) PrintCommentHint.Skip
-    else if (_printedComments.contains(comment)) PrintCommentHint.Skip
+    else if (printedComments.contains(comment)) PrintCommentHint.Skip
     else if (_noLineTerminator &&
       (!(HAS_NEWLINE findFirstIn comment.value).isEmpty || !(HAS_BlOCK_COMMENT_END findFirstIn comment.value).isEmpty))
       PrintCommentHint.Defer
     else {
-      _printedComments.add(comment)
+      printedComments.add(comment)
       if (!format.shouldPrintComment(comment.value)) PrintCommentHint.Skip
       else PrintCommentHint.Allow
     }
 
-  private def _printComment(comment: Comment, skipNewLines: CommentSkipNewLine) = {
+  private def _printComment(comment: Comment, skipNewLines: CommentSkipNewLine)(implicit options: PrinterOptions) = {
     val isBlockComment = comment.kind == CommentKind.Block
     val printNewLines =
       isBlockComment && skipNewLines != CommentSkipNewLine.All && !_noLineTerminator
@@ -535,7 +537,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
           else s"/*${comment.value}*/"
         val indentSize =
           (if (format.retainLines) 0 else buf.getCurrentColumn) +
-          (if (_shouldIndent('/') || format.retainLines) indentLevel * indentString.length() else 0)
+          (if (shouldIndent('/') || format.retainLines) indentLevel * indentString.length() else 0)
 
         newlineVal.replaceAll("\n(?!$)", s"\n${" " * indentSize}")
       }
@@ -560,7 +562,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     node: Node,
     parent: Option[Node] = None,
     lineOffset: Int = 0
-  ) = {
+  )(implicit options: PrinterOptions) = {
     val nodeLoc = node.location
     val len = comments.length
     var hasLoc = !nodeLoc.isEmpty
@@ -681,7 +683,7 @@ object Printer {
     case _ => false
   }
 
-  def commaSeparator(printer: Printer): Unit = {
+  def commaSeparator(printer: Printer)(implicit options: PrinterOptions): Unit = {
     printer.token(",")
     printer.space()
   }

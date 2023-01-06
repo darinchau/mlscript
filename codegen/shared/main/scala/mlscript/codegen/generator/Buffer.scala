@@ -186,7 +186,7 @@ class Buffer(map: Option[SourceMapBuilder], printer: Printer) {
   def hasContent: Boolean =
     !revertableQueue.isEmpty || last != '\u0000'
 
-  def exactSource(loc: Option[Location], node: Node, parent: Option[Node], printer: Printer)(implicit inForStatementInitCounter: Int): Unit =
+  def exactSource(loc: Option[Location], node: Node, parent: Option[Node], printer: Printer)(implicit options: PrinterOptions): Unit =
     if (map.isEmpty) printer.print(node, parent)
     else {
       source(LocationType.Start, loc)
@@ -205,7 +205,7 @@ class Buffer(map: Option[SourceMapBuilder], printer: Printer) {
   ): Unit =
     if (!map.isEmpty) normalizePosition(prop, loc, lineOffset, columnOffset)
 
-  def withSource(prop: LocationType, loc: Option[Location], node: Node, parent: Node, printer: Printer)(implicit inForStatementInitCounter: Int): Unit =
+  def withSource(prop: LocationType, loc: Option[Location], node: Node, parent: Node, printer: Printer)(implicit options: PrinterOptions): Unit =
     if (map.isEmpty) printer.print(node, Some(parent))
     else {
       source(prop, loc)

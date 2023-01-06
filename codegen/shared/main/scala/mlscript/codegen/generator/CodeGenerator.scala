@@ -10,7 +10,7 @@ class CodeGenerator(
   sourceMap: SourceMapBuilder
 ) extends Printer(format, sourceMap):
 
-  override def print(node: Node, parent: Option[Node])(implicit inForStatementInitCounter: Int): Unit = node match
+  override def print(node: Node, parent: Option[Node])(implicit options: PrinterOptions): Unit = node match
     // BEGIN classes.ts
     case node @ ClassDeclaration(id, superClass, body, decorators) =>
       printJoin(decorators, node, PrintSequenceOptions())
@@ -495,7 +495,7 @@ class CodeGenerator(
       print(Some(right), Some(node))
     }
     case AssignmentExpression(op, left, right) => {
-      val parens = inForStatementInitCounter > 0 &&
+      val parens = options.inForStatementInitCounter > 0 &&
         op.equals("in") && Printer.needsParens(Some(node), parent, None)
       if (parens) token("(")
       print(Some(left), Some(node))
@@ -1171,7 +1171,7 @@ class CodeGenerator(
 
   def generate() = super.generate(ast)
 
-  private def tsPrintBraced(members: List[Node], node: Node)(implicit inForStatementInitCounter: Int) = {
+  private def tsPrintBraced(members: List[Node], node: Node)(implicit options: PrinterOptions) = {
     token("{")
     if (members.length > 0) {
       indent()
@@ -1187,7 +1187,7 @@ class CodeGenerator(
     rightBrace()
   }
 
-  private def tsPrintUnionOrIntersectionType(types: List[Node], node: Node, sep: String)(implicit inForStatementInitCounter: Int) =
+  private def tsPrintUnionOrIntersectionType(types: List[Node], node: Node, sep: String)(implicit options: PrinterOptions) =
     printJoin(Some(types), node, PrintSequenceOptions(
       separator = Some((p: Printer) => { p.space(); p.token(sep); p.space(); })
     ))
