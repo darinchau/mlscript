@@ -332,7 +332,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
               if (!exp.extra.isEmpty && exp.extra.get.contains("parenthesized")) => true 
             case _ => false
           }
-        else Parentheses.needParens(node, parent, printStack.toArray)
+        else Parentheses.needsParens(node, parent, printStack.reverse.toList)
 
       if (shouldPrintParens) {
         token("(")

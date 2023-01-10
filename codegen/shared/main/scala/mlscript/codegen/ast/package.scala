@@ -60,6 +60,20 @@ sealed abstract class Node extends Located:
       m
     }) += ("compact" -> value)
 
+  def parenthesized: Boolean =
+    extra match
+      case None => false
+      case Some(map) => map.get("parenthesized") match
+        case Some(parenthesized: Boolean) => parenthesized
+        case _ => false
+
+  def parenthesized_=(value: Boolean) =
+    (extra.getOrElse {
+      val m = MutMap.empty[String, Any]
+      extra = Some(m)
+      m
+    }) += ("parenthesized" -> value)
+
 enum CommentType:
   case Leading
   case Inner
@@ -78,7 +92,10 @@ trait Expression
 /**
  * A cover of BinaryExpression and LogicalExpression, which share the same AST shape.
  */
-trait Binary
+trait Binary:
+  val operator: BinaryOperator | LogicalOperator
+  val left: Node
+  val right: Node
 
 /**
  * A cover of FunctionParent and BlockParent.
@@ -113,7 +130,8 @@ trait CompletionStatement
 /**
  * A cover of ConditionalExpression and IfStatement, which share the same AST shape.
  */
-trait Conditional
+trait Conditional:
+  val test: Node with Expression
 
 /**
  * A cover of loop statements.
@@ -218,7 +236,8 @@ trait Pattern
 /**
  * A cover of ClassExpression and ClassDeclaration, which share the same AST shape.
  */
-trait Class
+trait Class:
+  val superClass: Option[Node with Expression]
 
 /**
  * A cover of ImportDeclaration and ExportDeclaration
