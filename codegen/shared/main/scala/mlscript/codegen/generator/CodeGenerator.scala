@@ -61,13 +61,13 @@ class CodeGenerator(
     case node @ ClassProperty(key, value, typeAnnotation, decorators, computed, static) =>
       printJoin(decorators, node, PrintSequenceOptions())
       node.key.location.flatMap(_.end.map(_.line)).foreach(catchUp)
-      // tsPrintClassMemberModifiers(node) // TODO: Not implemented yet
+      tsPrintClassMemberModifiers(node)
       if (node.computed) {
         token("[")
         print(Some(key), Some(node))
         token("]")
       } else {
-        // _variance(node) // TODO: Not implemented yet
+        variance(node)
         print(Some(key), Some(node))
       }
       if (node.optional.getOrElse(false)) token("?")
@@ -83,7 +83,7 @@ class CodeGenerator(
     case node @ ClassAccessorProperty(key, value, typeAnnotation, decorators, computed, static) =>
       printJoin(decorators, node, PrintSequenceOptions())
       node.key.location.flatMap(_.end).map(_.line).foreach(catchUp)
-      // tsPrintClassMemberModifiers(node) // TODO: Not implemented yet
+      tsPrintClassMemberModifiers(node)
       word("accessor", true)
       space()
       if (node.computed) {
@@ -91,7 +91,7 @@ class CodeGenerator(
         print(Some(key), Some(node))
         token("]")
       } else {
-        // _variance(node) // TODO: Not implemented yet
+        variance(node)
         print(Some(key), Some(node))
       }
       if (node.optional.getOrElse(false)) token("?")
@@ -352,7 +352,7 @@ class CodeGenerator(
         case UnaryOperator.Void => word("void"); space()
         case UnaryOperator.Delete => word("delete"); space()
         case UnaryOperator.TypeOf => word("typeof"); space()
-        // TODO: throw?
+        case UnaryOperator.Throw => word("throw"); space()
         case UnaryOperator.BitwiseNot => token("~")
         case UnaryOperator.LogicalNot => token("!")
         case UnaryOperator.Negation => token("-")
@@ -377,13 +377,17 @@ class CodeGenerator(
       token(")")
     }
     case UpdateExpression(op, arg, prefix) =>
+      val s = op match {
+        case UpdateOperator.Decrement => "--"
+        case UpdateOperator.Increment => "++"
+      }
       if (prefix) {
-        // TODO op2string token(op)
+        token(s)
         print(Some(arg), Some(node))
       }
       else {
         printTerminatorless(arg, node, true)
-        // TODO op2string token(op)
+        token(s)
       }
     case ConditionalExpression(test, cons, alt) => {
       print(Some(test), Some(node))
@@ -396,9 +400,8 @@ class CodeGenerator(
       word("new"); space()
       print(Some(callee), Some(node))
       def run() = {
-        // TODO: seems not correct here yet
-        // print(Some(ne.typeArguments), Some(ne))
-        // print(Some(ne.typeParameters), Some(ne))
+        print(ne.typeArguments, Some(ne))
+        print(ne.typeParameters, Some(ne))
         token("(")
         printList(args, ne, PrintSequenceOptions())
         token(")")
@@ -432,7 +435,7 @@ class CodeGenerator(
         throw new Exception("Got a MemberExpression for MemberExpression property")
       }
 
-      val computed = com.getOrElse(false) // TODO: no value found
+      val computed = com.getOrElse(false)
       if (opt) token("?.")
       if (computed) {
         token("[")
@@ -463,7 +466,6 @@ class CodeGenerator(
     }
     case AwaitExpression(args) => {
       word("await")
-      // TODO: should args be optional?
       space()
       printTerminatorless(args, node, false)
     }
@@ -491,7 +493,6 @@ class CodeGenerator(
     }
     case AssignmentPattern(left, right) => {
       print(Some(left), Some(node))
-      // TODO: @ts-expect-error
       space(); token("="); space()
       print(Some(right), Some(node))
     }
@@ -522,8 +523,7 @@ class CodeGenerator(
         throw new Exception("Got a MemberExpression for MemberExpression property")
       }
 
-      val computed = com // TODO: no value found
-      if (computed) {
+      if (com) {
         token("[")
         print(Some(prop), Some(node))
         token("]")
@@ -567,8 +567,8 @@ class CodeGenerator(
       }
 
       token("*"); space(); word("from"); space()
-      // @ts-expect-error
       print(Some(source), Some(node))
+      semicolon()
     }
     case dec @ ExportNamedDeclaration(declaration, specifiers, source) => {
       word("export"); space()
@@ -739,7 +739,6 @@ class CodeGenerator(
     }
     case TSTypeAnnotation(anno) => {
       token(":"); space()
-      // @ts-expect-error node.optional
       print(Some(anno), Some(node))
     }
     case TSTypeParameterInstantiation(params) => {
@@ -789,13 +788,13 @@ class CodeGenerator(
         word("readonly"); space()
       }
 
-      // TODO: _param(node.parameter)
+      param(params)
     }
     case fun @ TSDeclareFunction(id, tp, params, ret) => {
       if (fun.declare.getOrElse(false)) {
         word("declare"); space()
       }
-      // TODO: _functionHead(node)
+      functionHead(fun)
       token(";")
     }
     case method @ TSDeclareMethod(dec, key, tp, params, ret) => {
@@ -1193,6 +1192,165 @@ class CodeGenerator(
       separator = Some((p: Printer) => { p.space(); p.token(sep); p.space(); })
     ))
 
+  private def tsPrintClassMemberModifiers(
+    node: ClassProperty | ClassAccessorProperty | ClassMethod | ClassPrivateMethod | TSDeclareMethod
+  )(implicit options: PrinterOptions) = {
+    val isField = node match {
+      case _: ClassAccessorProperty => true
+      case _: ClassProperty => true
+      case _ => false
+    }
+
+    def execute(declare: Boolean, access: Option[AccessModifier], static: Boolean, overrided: Boolean, abs: Boolean, readonly: Boolean) = {
+      if (isField && declare) { word("declare"); space() }
+      access match {
+        case Some(AccessModifier.Public) => { word("public"); space() }
+        case Some(AccessModifier.Private) => { word("private"); space() }
+        case Some(AccessModifier.Protected) => { word("protected"); space() }
+
+        case _ => ()
+      }
+      if (static) { word("static"); space() }
+      if (overrided) { word("override"); space() }
+      if (abs) { word("abstract"); space() }
+      if (isField && readonly) { word("readonly"); space() }
+    }
+
+    node match {
+      case node @ ClassProperty(_, _, _, _, _, static) =>
+        execute(node.declare.getOrElse(false),
+          node.accessibility, static,
+          node.`override`.getOrElse(false),
+          node.`abstract`.getOrElse(false),
+          node.readonly.getOrElse(false))
+      case node @ ClassAccessorProperty(_, _, _, _, _, static) =>
+        execute(node.declare.getOrElse(false),
+          node.accessibility, static,
+          node.`override`.getOrElse(false),
+          node.`abstract`.getOrElse(false),
+          node.readonly.getOrElse(false))
+      case node @ ClassMethod(_, _, _, _, _, static, _, _) =>
+        execute(false,
+          node.accessibility, static,
+          node.`override`.getOrElse(false),
+          node.`abstract`.getOrElse(false),
+          false)
+      case node @ ClassPrivateMethod(_, _, _, _, static) =>
+        execute(false,
+          node.accessibility, static,
+          node.`override`.getOrElse(false),
+          node.`abstract`.getOrElse(false),
+          false)
+      case node @ TSDeclareMethod(_, _, _, _, _) =>
+        execute(true,
+          node.accessibility, node.static.getOrElse(false),
+          node.`override`.getOrElse(false),
+          node.`abstract`.getOrElse(false),
+          false)
+    }
+  }
+
+  private def variance(
+    node: TypeParameter | ObjectTypeIndexer | ObjectTypeProperty | ClassProperty | ClassPrivateProperty | ClassAccessorProperty
+  )(implicit options: PrinterOptions) = {
+    val vari = node match {
+      case TypeParameter(_, _, v, _) => v
+      case ObjectTypeIndexer(_, _, _, v, _) => v
+      case ObjectTypeProperty(_, _, v, _, _, _, _, _) => v
+      case p: ClassProperty => p.variance
+      case p: ClassPrivateProperty => p.variance
+      case p: ClassAccessorProperty => p.variance
+    }
+
+    vari match {
+      case Some(Variance(VarianceKind.Covariant)) => token("+")
+      case Some(Variance(VarianceKind.Contravariant)) => token("-")
+      case _ => ()
+    }
+  }
+
+  private def param(parameter: Identifier | RestElement | Node with Pattern | TSParameterProperty, parent: Option[Node] = None)(implicit options: PrinterOptions) = {
+    val dec = parameter match {
+      case id: Identifier => id.decorators
+      case e: RestElement => e.decorators
+      // TODO: move decorators to Pattern trait
+      case p: TSParameterProperty => p.decorators
+      case _ => None
+    }
+
+    printJoin(dec, parameter, PrintSequenceOptions())
+    print(Some(parameter), parent)
+  }
+
+  private def predicate(
+    node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression,
+    noLineTerminatorAfter: Boolean = false
+  )(implicit options: PrinterOptions) = {
+    val pred = node match {
+      case d: FunctionDeclaration => d.predicate
+      case e: FunctionExpression => e.predicate
+      case e: ArrowFunctionExpression => e.predicate
+    }
+    val rt = node match {
+      case d: FunctionDeclaration => d.returnType
+      case e: FunctionExpression => e.returnType
+      case e: ArrowFunctionExpression => e.returnType
+    }
+
+    pred match {
+      case Some(_) =>
+        if (rt.isEmpty) token(":")
+        space(); print(pred, Some(node), noLineTerminatorAfter)
+      case _ => ()
+    }
+  }
+
+  private def functionHead(
+    node: FunctionDeclaration | FunctionExpression | TSDeclareFunction
+  )(implicit options: PrinterOptions) = {
+    val async = node match {
+      case FunctionDeclaration(_, _, _, _, async) => async
+      case FunctionExpression(_, _, _, _, async) => async
+      case d: TSDeclareFunction => d.async.getOrElse(false)
+    }
+
+    if (async) {
+      word("async")
+      _endWithInnerRaw = false
+      space()
+    }
+
+    word("function")
+
+    val generator = node match {
+      case FunctionDeclaration(_, _, _, generator, _) => generator
+      case FunctionExpression(_, _, _, generator, _) => generator
+      case d: TSDeclareFunction => d.generator.getOrElse(false)
+    }
+
+    if (generator) {
+      _endWithInnerRaw = false
+      token("*")
+    }
+
+    space()
+    val id = node match {
+      case FunctionDeclaration(id, _, _, _, _) => id
+      case FunctionExpression(id, _, _, _, _) => id
+      case TSDeclareFunction(id, _, _, _) => id
+    }
+    print(id, Some(node))
+    id match {
+      case Some(id) => param(id)
+      case _ => ()
+    }
+
+    node match {
+      case d: FunctionDeclaration => predicate(d)
+      case e: FunctionExpression => predicate(e)
+      case _ => ()
+    }
+  }
 end CodeGenerator
 
 object CodeGenerator:
