@@ -39,7 +39,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private var _noLineTerminator = false
   private var _endsWithWord = false
   private var _endsWithInteger = false
-  private var _endWithInnerRaw = false
+  protected  var _endWithInnerRaw = false
   private var _indentInnerComments = true
   private var _parenPushNewlineState: Option[Boolean] = None
   private var _lastCommentLine = 0

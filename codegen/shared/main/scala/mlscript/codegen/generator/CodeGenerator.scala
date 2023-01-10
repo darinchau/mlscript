@@ -377,13 +377,17 @@ class CodeGenerator(
       token(")")
     }
     case UpdateExpression(op, arg, prefix) =>
+      val s = op match {
+        case UpdateOperator.Decrement => "--"
+        case UpdateOperator.Increment => "++"
+      }
       if (prefix) {
-        // TODO op2string token(op)
+        token(s)
         print(Some(arg), Some(node))
       }
       else {
         printTerminatorless(arg, node, true)
-        // TODO op2string token(op)
+        token(s)
       }
     case ConditionalExpression(test, cons, alt) => {
       print(Some(test), Some(node))
@@ -396,9 +400,8 @@ class CodeGenerator(
       word("new"); space()
       print(Some(callee), Some(node))
       def run() = {
-        // TODO: seems not correct here yet
-        // print(Some(ne.typeArguments), Some(ne))
-        // print(Some(ne.typeParameters), Some(ne))
+        print(ne.typeArguments, Some(ne))
+        print(ne.typeParameters, Some(ne))
         token("(")
         printList(args, ne, PrintSequenceOptions())
         token(")")
@@ -432,7 +435,7 @@ class CodeGenerator(
         throw new Exception("Got a MemberExpression for MemberExpression property")
       }
 
-      val computed = com.getOrElse(false) // TODO: no value found
+      val computed = com.getOrElse(false)
       if (opt) token("?.")
       if (computed) {
         token("[")
@@ -463,7 +466,6 @@ class CodeGenerator(
     }
     case AwaitExpression(args) => {
       word("await")
-      // TODO: should args be optional?
       space()
       printTerminatorless(args, node, false)
     }
@@ -491,7 +493,6 @@ class CodeGenerator(
     }
     case AssignmentPattern(left, right) => {
       print(Some(left), Some(node))
-      // TODO: @ts-expect-error
       space(); token("="); space()
       print(Some(right), Some(node))
     }
@@ -522,8 +523,7 @@ class CodeGenerator(
         throw new Exception("Got a MemberExpression for MemberExpression property")
       }
 
-      val computed = com // TODO: no value found
-      if (computed) {
+      if (com) {
         token("[")
         print(Some(prop), Some(node))
         token("]")
@@ -567,8 +567,8 @@ class CodeGenerator(
       }
 
       token("*"); space(); word("from"); space()
-      // @ts-expect-error
       print(Some(source), Some(node))
+      semicolon()
     }
     case dec @ ExportNamedDeclaration(declaration, specifiers, source) => {
       word("export"); space()
@@ -739,7 +739,6 @@ class CodeGenerator(
     }
     case TSTypeAnnotation(anno) => {
       token(":"); space()
-      // @ts-expect-error node.optional
       print(Some(anno), Some(node))
     }
     case TSTypeParameterInstantiation(params) => {
@@ -789,13 +788,13 @@ class CodeGenerator(
         word("readonly"); space()
       }
 
-      // TODO: _param(node.parameter)
+      param(params)
     }
     case fun @ TSDeclareFunction(id, tp, params, ret) => {
       if (fun.declare.getOrElse(false)) {
         word("declare"); space()
       }
-      // TODO: _functionHead(node)
+      functionHead(fun)
       token(";")
     }
     case method @ TSDeclareMethod(dec, key, tp, params, ret) => {
@@ -1270,6 +1269,88 @@ class CodeGenerator(
     }
   }
 
+  private def param(parameter: Identifier | RestElement | Node with Pattern | TSParameterProperty, parent: Option[Node] = None)(implicit options: PrinterOptions) = {
+    val dec = parameter match {
+      case id: Identifier => id.decorators
+      case e: RestElement => e.decorators
+      // TODO: move decorators to Pattern trait
+      case p: TSParameterProperty => p.decorators
+      case _ => None
+    }
+
+    printJoin(dec, parameter, PrintSequenceOptions())
+    print(Some(parameter), parent)
+  }
+
+  private def predicate(
+    node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression,
+    noLineTerminatorAfter: Boolean = false
+  )(implicit options: PrinterOptions) = {
+    val pred = node match {
+      case d: FunctionDeclaration => d.predicate
+      case e: FunctionExpression => e.predicate
+      case e: ArrowFunctionExpression => e.predicate
+    }
+    val rt = node match {
+      case d: FunctionDeclaration => d.returnType
+      case e: FunctionExpression => e.returnType
+      case e: ArrowFunctionExpression => e.returnType
+    }
+
+    pred match {
+      case Some(_) =>
+        if (rt.isEmpty) token(":")
+        space(); print(pred, Some(node), noLineTerminatorAfter)
+      case _ => ()
+    }
+  }
+
+  private def functionHead(
+    node: FunctionDeclaration | FunctionExpression | TSDeclareFunction
+  )(implicit options: PrinterOptions) = {
+    val async = node match {
+      case FunctionDeclaration(_, _, _, _, async) => async
+      case FunctionExpression(_, _, _, _, async) => async
+      case d: TSDeclareFunction => d.async.getOrElse(false)
+    }
+
+    if (async) {
+      word("async")
+      _endWithInnerRaw = false
+      space()
+    }
+
+    word("function")
+
+    val generator = node match {
+      case FunctionDeclaration(_, _, _, generator, _) => generator
+      case FunctionExpression(_, _, _, generator, _) => generator
+      case d: TSDeclareFunction => d.generator.getOrElse(false)
+    }
+
+    if (generator) {
+      _endWithInnerRaw = false
+      token("*")
+    }
+
+    space()
+    val id = node match {
+      case FunctionDeclaration(id, _, _, _, _) => id
+      case FunctionExpression(id, _, _, _, _) => id
+      case TSDeclareFunction(id, _, _, _) => id
+    }
+    print(id, Some(node))
+    id match {
+      case Some(id) => param(id)
+      case _ => ()
+    }
+
+    node match {
+      case d: FunctionDeclaration => predicate(d)
+      case e: FunctionExpression => predicate(e)
+      case _ => ()
+    }
+  }
 end CodeGenerator
 
 object CodeGenerator:
