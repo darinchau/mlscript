@@ -5,17 +5,11 @@ import scala.collection.mutable.{ArrayBuffer, HashSet}
 import mlscript.codegen.{Position, Location, LocationType}
 import mlscript.codegen.ast._
 
-case class AddNewlineOptions(
-  val nextNodeStartLine: Int,
-  val addNewlines: (Boolean, Node) => Int
-)
-
 case class PrintSequenceOptions(
   val statement: Option[Boolean] = None,
   val indent: Option[Boolean] = None,
   val trailingCommentsLineOffset: Option[Int] = None,
   val nextNodeStartLine: Option[Int] = None,
-  val addNewlines: Option[(Boolean, Node)=>Int] = None,
   val separator: Option[(Printer) => Unit] = None,
   val iterator: Option[(Node, Int) => Unit] = None
 )
@@ -39,7 +33,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private val buf = new Buffer(Some(map), this)
   private val indentString = format.indent
   private val printedComments = new HashSet[Comment]()
-
   private var indentLevel: Int = 0
   
   private var _noLineTerminator = false
@@ -391,7 +384,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
           // TODO: check is node is empty
 
           if (opts.statement.getOrElse(false))
-            _printNewline(i == 0, AddNewlineOptions(0, opts.addNewlines.getOrElse((b, n) => 0)))
+            _printNewline(i == 0, 0)
 
           print(Some(node), Some(parent), false, opts.trailingCommentsLineOffset.getOrElse(0))
 
@@ -410,8 +403,8 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
             else {
               val nextNode = nodes(i + 1)
               val newlinesOpts = nextNode.location match {
-                case Some(loc) => AddNewlineOptions(loc.start.get.line, opts.addNewlines.getOrElse((b, n) => 0))
-                case _ => AddNewlineOptions(0, opts.addNewlines.getOrElse((b, n) => 0))
+                case Some(loc) => loc.start.get.line
+                case _ => 0
               }
 
               _printNewline(true, newlinesOpts)
@@ -481,7 +474,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   def printSequence[T <: Node](nodes: List[T], parent: Node, opts: PrintSequenceOptions)(implicit options: PrinterOptions): Unit = {
     val newOpts = PrintSequenceOptions(statement = Some(true), indent = opts.indent,
       trailingCommentsLineOffset = opts.trailingCommentsLineOffset,
-      nextNodeStartLine = opts.nextNodeStartLine, addNewlines = opts.addNewlines)
+      nextNodeStartLine = opts.nextNodeStartLine)
     printJoin(Some(nodes), parent, newOpts)
   }
 
@@ -491,11 +484,11 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     printJoin(Some(items), parent, newOpts)
   }
 
-  private def _printNewline(newline: Boolean, opts: AddNewlineOptions)(implicit options: PrinterOptions) = 
+  private def _printNewline(newline: Boolean, nextNodeStartLine: Int)(implicit options: PrinterOptions) = 
     if (!format.retainLines && !format.compact) {
       if (format.concise) space()
       else if (newline) {
-        val startLine = opts.nextNodeStartLine
+        val startLine = nextNodeStartLine
         val lastCommentLine = _lastCommentLine
         val offset = startLine - lastCommentLine
 
