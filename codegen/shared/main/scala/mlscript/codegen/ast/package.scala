@@ -583,6 +583,7 @@ enum UnaryOperator:
   case TypeOf
   case Void
   case Delete
+  case Throw
 
 case class UnaryExpression(
   val operator: UnaryOperator,
