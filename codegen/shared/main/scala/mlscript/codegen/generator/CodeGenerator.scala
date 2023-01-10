@@ -3,6 +3,7 @@ package mlscript.codegen.generator
 import mlscript.codegen.LocationType
 import mlscript.codegen.ast._
 import mlscript.codegen.LocationType
+import mlscript.codegen.generator.Parentheses
 
 class CodeGenerator(
   ast: Node,
@@ -496,7 +497,7 @@ class CodeGenerator(
     }
     case AssignmentExpression(op, left, right) => {
       val parens = options.inForStatementInitCounter > 0 &&
-        op.equals("in") && Printer.needsParens(Some(node), parent, None)
+        op.equals("in") && Parentheses.needParens(node, parent, Array())
       if (parens) token("(")
       print(Some(left), Some(node))
       space()

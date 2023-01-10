@@ -4,6 +4,7 @@ import scala.util.matching.Regex
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import mlscript.codegen.{Position, Location, LocationType}
 import mlscript.codegen.ast._
+import mlscript.codegen.generator.Parentheses
 
 case class PrintSequenceOptions(
   val statement: Option[Boolean] = None,
@@ -331,7 +332,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
               if (!exp.extra.isEmpty && exp.extra.get.contains("parenthesized")) => true 
             case _ => false
           }
-        else Printer.needsParens(Some(node), parent, Some(printStack.toArray))
+        else Parentheses.needParens(node, parent, printStack.toArray)
 
       if (shouldPrintParens) {
         token("(")
@@ -655,27 +656,6 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
 }
 
 object Printer {
-  def needsParens(
-    node: Option[Node],
-    parent: Option[Node],
-    printStack: Option[Array[Node]]
-  ): Boolean = parent match {
-    case None => false
-    case Some(value) => value match {
-      case NewExpression(callee, args) => node match {
-        case Some(value) if (value == callee && isOrHasCallExpression(value)) /* Is it correct? */ => true
-        case _ => false // TODO: find @see index.ts line 119
-      }
-      case _ => false // TODO: find @see index.ts line 119
-    }
-  }
-
-  private def isOrHasCallExpression(node: Node): Boolean = node match {
-    case ce: CallExpression => true
-    case MemberExpression(obj, _, _, _) => isOrHasCallExpression(obj)
-    case _ => false
-  }
-
   def commaSeparator(printer: Printer)(implicit options: PrinterOptions): Unit = {
     printer.token(",")
     printer.space()
