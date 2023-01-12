@@ -61,6 +61,7 @@ lazy val mlscript_codegen = crossProject(JSPlatform, JVMPlatform).in(file("codeg
     name := "mlscript-codegen",
     scalaVersion := "3.1.3",
     sourceDirectory := baseDirectory.value.getParentFile()/"shared",
+    Test / scalaSource := baseDirectory.value.getParentFile().getParentFile()/"shared"/"src"/"test"/"scala"/"mlscript"/"codegen",
     libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
     watchSources += WatchSource(
       baseDirectory.value.getParentFile()/"shared"/"test"/"diff", "*.mls", NothingFilter),
