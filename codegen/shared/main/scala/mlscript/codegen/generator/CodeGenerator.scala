@@ -213,6 +213,26 @@ class CodeGenerator(
     }
     // To be continued...
     // END flow.ts
+    // BEGIN methods.ts
+    case exp @ FunctionExpression(_, _, body, _, _) =>
+      functionHead(exp)
+      space()
+      print(Some(body), Some(node))
+    case exp @ ArrowFunctionExpression(params, body, async, _) =>
+      if (async) word("async", true); space()
+      print(exp.typeParameters, Some(node))
+      token("(")
+      parameters(params, node)
+      token(")")
+      print(exp.returnType, Some(node))
+      _noLineTerminator = true
+      predicate(exp, true)
+      space()
+      printInnerComments()
+      token("=>")
+      space()
+      print(Some(body), Some(node))
+    // END methods.ts
 
     // BEGIN modules.ts
     case node @ ImportSpecifier(local, imported) =>
@@ -809,7 +829,7 @@ class CodeGenerator(
     case TSCallSignatureDeclaration(tp, params, anno) => {
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")")
       // TODO: No return type found
       print(anno, Some(node))
@@ -819,7 +839,7 @@ class CodeGenerator(
       word("new"); space()
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")")
       // TODO: No return type found
       print(anno, Some(node))
@@ -854,7 +874,7 @@ class CodeGenerator(
 
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")")
       // TODO: No return type found
       print(anno, Some(node))
@@ -877,7 +897,7 @@ class CodeGenerator(
     case TSFunctionType(tp, params, anno) => {
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")"); space(); token("=>"); space()
       // TODO: No return type found
       print(anno, Some(node))
@@ -891,7 +911,7 @@ class CodeGenerator(
 
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")"); space(); token("=>"); space()
       // TODO: No return type found
       print(anno, Some(node))
@@ -1280,6 +1300,13 @@ class CodeGenerator(
     printJoin(dec, parameter, PrintSequenceOptions())
     print(Some(parameter), parent)
   }
+
+  private def parameters(parameter: List[Identifier | RestElement | Node with Pattern | TSParameterProperty], parent: Node)
+    (implicit options: PrinterOptions) =
+    parameter.iterator.zipWithIndex.foreach((p, i) => {
+      param(p, Some(parent))
+      if (i < parameter.length) token(","); space()
+    })
 
   private def predicate(
     node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression,

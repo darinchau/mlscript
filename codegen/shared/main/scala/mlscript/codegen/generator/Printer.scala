@@ -36,7 +36,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private val printedComments = new HashSet[Comment]()
   private var indentLevel: Int = 0
   
-  private var _noLineTerminator = false
+  protected var _noLineTerminator = false
   private var _endsWithWord = false
   private var _endsWithInteger = false
   protected  var _endWithInnerRaw = false
