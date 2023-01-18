@@ -1107,8 +1107,6 @@ class CodeGenerator(
         }
       }
       print(Some(id), Some(node))
-      // TODO: should body be optional
-
       def run (md: TSModuleDeclaration): Unit = {
         token(".")
         print(Some(md.id), Some(md))
@@ -1167,6 +1165,7 @@ class CodeGenerator(
       print(Some(id), Some(node))
     }
     case Identifier(name) => word(name)
+    case StringLiteral(s) => token(s)
     case _ => () // TODO
 
   def generate() = super.generate(ast)

@@ -117,3 +117,35 @@ class CodeGenerationSuite extends munit.FunSuite:
       assertEquals(res.code, "enum foo {bar,baz,}")
     }
   }
+  test("Code Generation - Comprehensive Tests") {
+    {
+      val res = CodeGenerator(
+        File(Program(
+          List[Node with Statement](
+            ClassDeclaration(
+              Identifier("Optional")(None, None, None),
+              None,
+              ClassBody(List(
+                ClassProperty(Identifier("type")(None, None, None))(None, None, None)
+              ))(None, None, None)
+            )(None, None, None),
+            ClassDeclaration(
+              Identifier("Some")(None, None, None), Some(Identifier("Optional")(None, None, None)),
+              ClassBody(List(
+                ClassProperty(Identifier("type")(None, None, None), Some(StringLiteral("\"Some\"")(None, None, None)))(None, None, None),
+                ClassProperty(Identifier("value")(None, None, None))(None, None, None)
+              ))(None, None, None)
+            )(None, None, None),
+            ClassDeclaration(
+              Identifier("None")(None, None, None), Some(Identifier("Optional")(None, None, None)),
+              ClassBody(List(
+                ClassProperty(Identifier("type")(None, None, None), Some(StringLiteral("\"None\"")(None, None, None)))(None, None, None)
+              ))(None, None, None)
+            )(None, None, None)
+          ),
+          sourceFile = ""
+        )(None, None, None))(None, None, None), format, sourceMap
+      ).generate()
+      assertEquals(res.code, "class Optional {type;}class Some extends Optional {type = \"Some\";value;}class None extends Optional {type = \"None\";}")
+    }
+  }
