@@ -329,7 +329,7 @@ trait TSType
  */
 trait TSBaseType
 
-case class ArrayExpression(val elements: List[Option[Expression | SpreadElement]] = Nil)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ArrayExpression(val elements: List[Option[(Node with Expression) | (Node with SpreadElement)]] = Nil)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression
 
 case class AssignmentExpression(
@@ -537,6 +537,7 @@ enum ObjectMethodKind:
   case Method
   case Getter
   case Setter
+  case Init
 
 case class ObjectMethod(
   val kind: Option[ObjectMethodKind] = Some(ObjectMethodKind.Method),
@@ -649,7 +650,7 @@ case class AssignmentPattern(
   var decorators: Option[List[Decorator]] = None
   var typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None
 
-case class ArrayPattern(val elements: List[Option[PatternLike | LVal]])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ArrayPattern(val elements: List[Option[(Node with PatternLike) | (Node with LVal)]])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Pattern with PatternLike with LVal:
   var decorators: Option[List[Decorator]] = None
   var optional: Option[Boolean] = None

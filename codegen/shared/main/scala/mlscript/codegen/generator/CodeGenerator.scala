@@ -433,11 +433,136 @@ class CodeGenerator(
         print(init, Some(node))
       }
     // END statements.ts
+    // BEGIN types.ts
+    case Identifier(name) => word(name)
+    case _: ArgumentPlaceholder => token("?")
+    case RestElement(arg) =>
+      token("...")
+      print(Some(arg), Some(node))
+    case SpreadElement(arg) =>
+      token("...")
+      print(Some(arg), Some(node))
+    case exp @ ObjectExpression(prop) =>
+      token("{")
+      if (!prop.isEmpty) {
+        space()
+        printList(prop, node, PrintSequenceOptions(indent = Some(true), statement = Some(true)))
+        space()
+      }
+      sourceWithOffset(LocationType.End, exp.location, 0, -1)
+      token("}")
+    case p @ ObjectPattern(prop) =>
+      token("{")
+      if (!prop.isEmpty) {
+        space()
+        printList(prop, node, PrintSequenceOptions(indent = Some(true), statement = Some(true)))
+        space()
+      }
+      sourceWithOffset(LocationType.End, p.location, 0, -1)
+      token("}")
+    case m @ ObjectMethod(kind, key, params, body, computed, generator, async) =>
+      printJoin(m.decorators, node, PrintSequenceOptions())
+      kind match {
+        case Some(ObjectMethodKind.Getter) => word("get"); space()
+        case Some(ObjectMethodKind.Setter) => word("set"); space()
+        case _ => ()
+      }
+      if (async) word("async", true)
+      kind match {
+        case Some(ObjectMethodKind.Method) if (generator) => token("*")
+        case Some(ObjectMethodKind.Init) if (generator) => token("*")
+        case _ => ()
+      }
+      if (computed) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+      }
+      else print(Some(key), Some(node))
+      print(m.typeParameters, Some(node))
+      token("(")
+      parameters(params, m)
+      token(")")
+      print(m.returnType, Some(node), false)
+      _noLineTerminator = false
+      space()
+      print(Some(body), Some(node))
+    case ObjectProperty(key, value, computed, shorthand, dec) =>
+      printJoin(dec, node, PrintSequenceOptions())
+      if (computed) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+
+        token(":"); space()
+        print(Some(value), Some(node))
+      }
+      else {
+        print(Some(key), Some(node))
+
+        if (!shorthand)
+          key match {
+            case key: Identifier => value match {
+              case value: Identifier if (key.name.equals(value.name)) =>
+                token(":"); space()
+                print(Some(value), Some(node))
+              case _ => ()
+            }
+            case _ => ()
+          }
+      }
+    case ArrayExpression(ele) =>
+      token("[")
+      ele.iterator.zipWithIndex.foreach((e, i) => e match {
+        case Some(_) =>
+          if (i > 0) space()
+          print(e, Some(node))
+          if (i < ele.length - 1) token(",")
+        case _ => token(",")
+      })
+      token("]")
+    case ArrayPattern(ele) =>
+      token("[")
+      ele.iterator.zipWithIndex.foreach((e, i) => e match {
+        case Some(_) =>
+          if (i > 0) space()
+          print(e, Some(node))
+          if (i < ele.length - 1) token(",")
+        case _ => token(",")
+      })
+      token("]")
+    case RecordExpression(props) =>
+      token("{|")
+      if (!props.isEmpty) {
+        space()
+        printList(props, node, PrintSequenceOptions(indent = Some(true), statement = Some(true)))
+        space()
+      }
+      token("|}")
+    case TupleExpression(ele) =>
+      token("[|")
+      ele.iterator.zipWithIndex.foreach((e, i) => {
+        if (i > 0) space()
+        print(Some(e), Some(node))
+        if (i < ele.length - 1) token(",")
+      })
+      token("|]")
+    case RegExpLiteral(pattern, flags) => word(s"/$pattern/$flags")
+    case BooleanLiteral(value) => if (value) word("true") else word("false")
+    case StringLiteral(s) => token(s)
+    case NullLiteral() => word("null")
+    case NumericLiteral(value) => number(value.toString())
+    case BigIntLiteral(value) => word(value)
+    case DecimalLiteral(value) => word(value)
+    case TopicReference() => token("#")
+    case PipelineTopicExpression(exp) => print(Some(exp), Some(node))
+    case PipelineBareFunction(callee) => print(Some(callee), Some(node))
+    case PipelinePrimaryTopicReference() => token("#")
+    // END types.ts
     case ThisExpression() => word("this")
     case Super() => word("super")
     case Import() => word("import")
     case EmptyStatement() => semicolon(true)
-    case PipelinePrimaryTopicReference() => token("#")
     case TSAnyKeyword() => word("any")
     case TSBigIntKeyword() => word("bigint")
     case TSUnknownKeyword() => word("unknown")
@@ -1337,8 +1462,6 @@ class CodeGenerator(
       word("export"); space(); token("as"); space(); word("namespace"); space()
       print(Some(id), Some(node))
     }
-    case Identifier(name) => word(name)
-    case StringLiteral(s) => token(s)
     case _ => () // TODO
 
   def generate() = super.generate(ast)
