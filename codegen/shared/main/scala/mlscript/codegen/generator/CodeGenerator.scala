@@ -279,11 +279,164 @@ class CodeGenerator(
       print(Some(exported), Some(node))
     // To be continued...
     // END modules.ts
+    // BEGIN statements.ts
+    case s @ WithStatement(obj, _) =>
+      word("with")
+      space()
+      token("(")
+      print(Some(obj), Some(node))
+      token(")")
+      printBlock(s.body, node)
+    case IfStatement(test, cons, alt) =>
+      word("if"); space(); token("(")
+      print(Some(test), Some(node))
+      token(")"); space()
+      token("{"); newline(); indent()
+      printAndIndentOnComments(cons, node)
+      dedent(); newline(); token("}")
+      alt match {
+        case Some(alt) =>
+          space(); word("else")
+          printAndIndentOnComments(alt, node)
+        case _ => ()
+      }
+    case ForStatement(init, test, update, body) =>
+      word("for"); space(); token("(")
+      print(init, Some(node))(options.derive(inFor = options.inForStatementInitCounter + 1))
+      token(";")
+      if (test.isDefined) space(); print(test, Some(node))
+      token(";")
+      if (update.isDefined) space(); print(update, Some(node))
+      token(")")
+      printBlock(body, node)
+    case WhileStatement(test, body) =>
+      word("while"); space(); token("(")
+      print(Some(test), Some(node))
+      token(")")
+      printBlock(body, node)
+    case ForInStatement(left, right, body) =>
+      word("for"); space()
+      noIndentInnerCommentsHere()
+      token("(")
+      print(Some(left), Some(node))
+      space(); word("in"); space()
+      print(Some(right), Some(node))
+      token(")")
+      printBlock(body, node)
+    case ForOfStatement(left, right, body, await) =>
+      word("for"); space()
+      if (await) word("await"); space()
+      noIndentInnerCommentsHere()
+      token("(")
+      print(Some(left), Some(node))
+      space(); word("of"); space()
+      print(Some(right), Some(node))
+      token(")")
+      printBlock(body, node)
+    case DoWhileStatement(test, body) =>
+      word("do"); space()
+      print(Some(body), Some(node))
+      space(); word("while"); space(); token("(")
+      print(Some(test), Some(body))
+      token(")"); semicolon()
+    case BreakStatement(label) =>
+      word("break")
+      printStatementAfterKeyword(label, node, true)
+    case ContinueStatement(label) =>
+      word("continue")
+      printStatementAfterKeyword(label, node, true)
+    case ReturnStatement(arg) =>
+      word("return")
+      printStatementAfterKeyword(arg, node, false)
+    case ThrowStatement(arg) =>
+      word("throw")
+      printStatementAfterKeyword(Some(arg), node, false)
+    case LabeledStatement(label, body) =>
+      print(Some(label), Some(node))
+      token(";"); space()
+      print(Some(body), Some(node))
+    case TryStatement(block, handler, finalizer) =>
+      word("try"); space()
+      print(Some(block), Some(node))
+      space()
+      print(handler, Some(node))
+      if (finalizer.isDefined) space(); word("finally"); space(); print(finalizer, Some(node))
+    case CatchClause(param, body) =>
+      word("catch"); space()
+      param match {
+        case Some(p) =>
+          token("(")
+          print(param, Some(node))
+          p match {
+            case i: Identifier => print(i.typeAnnotation, Some(node))
+            case p: ArrayPattern => print(p.typeAnnotation, Some(node))
+            case p: ObjectPattern => print(p.typeAnnotation, Some(node))
+          }
+          token(")"); space()
+        case _ => ()
+      }
+      print(Some(body), Some(node))
+    case SwitchStatement(dis, cases) =>
+      word("switch"); space(); token("(")
+      print(Some(dis), Some(node))
+      token(")"); space(); token("{")
+      printSequence(cases, node, PrintSequenceOptions(indent = Some(true)))
+      token("}")
+    case SwitchCase(test, cons) =>
+      test match {
+        case Some(_) =>
+          word("case"); space()
+          print(test, Some(node))
+          token(":")
+        case _ =>
+          word("default"); token(":")
+      }
+      if (!cons.isEmpty) newline(); printSequence(cons, node, PrintSequenceOptions(indent = Some(true)))
+    case DebuggerStatement() => word("debugger"); semicolon()
+    case vd @ VariableDeclaration(kind, decs) =>
+      if (vd.declare.getOrElse(false)) word("declare"); space()
+      kind match {
+        case VariableDeclarationKind.Const => word("const", false)
+        case VariableDeclarationKind.Let => word("let", false)
+        case VariableDeclarationKind.Using => word("using", true)
+        case VariableDeclarationKind.Var => word("var", false)
+      }
+      space()
+      val isFor = parent match {
+        case Some(p) => CodeGenerator.isFor(p)
+        case _ => false
+      }
+      val hasInits = if (!isFor) decs.foldLeft(false)((r, d) => if (d.init.isDefined) true else r) else false
+      if (hasInits)
+        printList(decs, node, PrintSequenceOptions(separator = Some((p: Printer) => {
+          p.token(","); p.newline()
+        }), indent = Some(decs.length > 1)))
+      else
+        printList(decs, node, PrintSequenceOptions(indent = Some(decs.length > 1)))
+      if (isFor)
+        parent match {
+          case Some(p: ForStatement) =>
+            p.init match {
+              case Some(value) if (value == node) => ()
+              case _ => semicolon()
+            }
+          case Some(p: ForInStatement) if (p.left == node) => ()
+          case Some(p: ForOfStatement) if (p.left == node) => ()
+          case _ => semicolon()
+        }
+      else semicolon()
+    case dec @ VariableDeclarator(id, init) =>
+      print(Some(id), Some(node))
+      if (dec.definite.getOrElse(false)) token("!")
+      if (init.isDefined) {
+        space(); token("="); space()
+        print(init, Some(node))
+      }
+    // END statements.ts
     case ThisExpression() => word("this")
     case Super() => word("super")
     case Import() => word("import")
     case EmptyStatement() => semicolon(true)
-    case DebuggerStatement() => { word("debugger"); semicolon() }
     case PipelinePrimaryTopicReference() => token("#")
     case TSAnyKeyword() => word("any")
     case TSBigIntKeyword() => word("bigint")
@@ -1190,6 +1343,15 @@ class CodeGenerator(
 
   def generate() = super.generate(ast)
 
+  private def printStatementAfterKeyword(node: Option[Node], parent: Node, isLabel: Boolean)(implicit options: PrinterOptions) =
+    node match {
+      case Some(node) =>
+        space()
+        printTerminatorless(node, parent, isLabel)
+        semicolon()
+      case _ => semicolon()
+    }
+
   private def tsPrintBraced(members: List[Node], node: Node)(implicit options: PrinterOptions) = {
     token("{")
     if (members.length > 0) {
@@ -1397,4 +1559,11 @@ object CodeGenerator:
       case p: ParenthesizedExpression => false
       case e: CallExpression => !isDecoratorMemberExpression(e.callee)
       case _ => !isDecoratorMemberExpression(node)
+    }
+  def isFor(node: Node): Boolean =
+    node match {
+      case _: ForInStatement => true
+      case _: ForOfStatement => true
+      case _: ForStatement => true
+      case _ => false
     }

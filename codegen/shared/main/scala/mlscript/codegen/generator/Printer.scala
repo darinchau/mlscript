@@ -426,11 +426,11 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     if (needIndent) dedent()
   }
 
-  def printBlock(parent: Node with BlockParent)(implicit options: PrinterOptions): Unit = ??? // TODO: move body to BlockParent
-  /*parent.body match {
-    case es: EmptyStatement => { space(); print(Some(es), Some(parent)) }
-    case _ => print(Some(parent.body), Some(parent))
-  }*/
+  def printBlock(body: Node, parent: Node)(implicit options: PrinterOptions): Unit =
+    parent match {
+      case _: EmptyStatement => { space(); print(Some(body), Some(parent)) }
+      case _ => print(Some(body), Some(parent))
+    }
 
   private def _printTrailingComments(node: Node, parent: Option[Node], lineOffset: Int = 0)(implicit options: PrinterOptions) = {
     val innerComments = node.innerComments
