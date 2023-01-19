@@ -395,7 +395,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
           }
 
           opts.separator match {
-            case Some(sep) if (i < nodes.length) => sep(this)
+            case Some(sep) if (i < nodes.length - 1) => sep(this)
             case _ => ()
           }
 

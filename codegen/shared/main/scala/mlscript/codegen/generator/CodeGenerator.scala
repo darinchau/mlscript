@@ -115,6 +115,72 @@ class CodeGenerator(
           printSequence(body, node, PrintSequenceOptions(indent = Some(true)))
           sourceWithOffset(LocationType.End, node.location, 0, -1)
           rightBrace()
+    case p @ ClassPrivateProperty(key, value, dec, static) =>
+      printJoin(dec, node, PrintSequenceOptions())
+      if (static) word("static"); space()
+      print(Some(key), Some(node))
+      print(p.typeAnnotation, Some(node))
+      if (value.isDefined) {
+        space(); token("="); space()
+        print(value, Some(node))
+      }
+      semicolon()
+    case method @ ClassMethod(kind, key, params, body, computed, _, generator, async) =>
+      printJoin(method.decorators, node, PrintSequenceOptions())
+      // TODO: catch up
+      tsPrintClassMemberModifiers(method)
+      kind match {
+        case Some(ClassMethodKind.Getter) => word("get"); space()
+        case Some(ClassMethodKind.Setter) => word("set"); space()
+        case _ => ()
+      }
+      if (async) word("async", true)
+      kind match {
+        case Some(ClassMethodKind.Method) if (generator) => token("*")
+        case _ => ()
+      }
+      if (computed) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+      }
+      else print(Some(key), Some(node))
+      print(method.typeParameters, Some(node))
+      token("(")
+      parameters(params, method)
+      token(")")
+      print(method.returnType, Some(node), false)
+      _noLineTerminator = false
+      space()
+      print(Some(body), Some(node))
+    case method @ ClassPrivateMethod(kind, key, params, body, _) =>
+      printJoin(method.decorators, node, PrintSequenceOptions())
+      // TODO: catch up
+      tsPrintClassMemberModifiers(method)
+      kind match {
+        case Some(ClassPrivateMethodKind.Getter) => word("get"); space()
+        case Some(ClassPrivateMethodKind.Setter) => word("set"); space()
+        case _ => ()
+      }
+      if (method.async.getOrElse(false)) word("async", true)
+      kind match {
+        case Some(ClassPrivateMethodKind.Method) if (method.generator.getOrElse(false)) => token("*")
+        case _ => ()
+      }
+      if (method.computed.getOrElse(false)) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+      }
+      else print(Some(key), Some(node))
+      print(method.typeParameters, Some(node))
+      token("(")
+      parameters(params, method)
+      token(")")
+      print(method.returnType, Some(node), false)
+      _noLineTerminator = false
+      space()
+      print(Some(body), Some(node))
     // END classes.ts
     // BEGIN flow.ts
     
