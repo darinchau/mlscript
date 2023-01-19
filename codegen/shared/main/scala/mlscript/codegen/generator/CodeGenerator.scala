@@ -218,6 +218,10 @@ class CodeGenerator(
       functionHead(exp)
       space()
       print(Some(body), Some(node))
+    case dec @ FunctionDeclaration(_, _, body, _, _) =>
+      functionHead(dec)
+      space()
+      print(Some(body), Some(node))
     case exp @ ArrowFunctionExpression(params, body, async, _) =>
       if (async) word("async", true); space()
       print(exp.typeParameters, Some(node))
@@ -805,7 +809,49 @@ class CodeGenerator(
       else token(op)
       space()
       print(Some(right), Some(node))
-      token(")")
+      if (parens) token(")")
+    }
+    case BinaryExpression(op, left, right) => {
+      print(Some(left), Some(node))
+      space()
+      op match {
+        case BinaryOperator.BitwiseAnd => token("&")
+        case BinaryOperator.BitwiseLeftShift => token("<<")
+        case BinaryOperator.BitwiseOr => token("|")
+        case BinaryOperator.BitwiseRightShift => token(">>")
+        case BinaryOperator.BitwiseUnsignedRightShift => token(">>>")
+        case BinaryOperator.BitwiseXor => token("^")
+        case BinaryOperator.Divide => token("/")
+        case BinaryOperator.Equal => token("==")
+        case BinaryOperator.Exponentiation => token("**")
+        case BinaryOperator.GreaterThan => token(">")
+        case BinaryOperator.GreaterThanOrEqual => token(">=")
+        case BinaryOperator.In => word("in")
+        case BinaryOperator.InstanceOf => word("instanceof")
+        case BinaryOperator.LessThan => token("<")
+        case BinaryOperator.LessThanOrEqual => token("<=")
+        case BinaryOperator.Minus => token("-")
+        case BinaryOperator.Modolus => token("%")
+        case BinaryOperator.Multiplication => token("*")
+        case BinaryOperator.NotEqual => token("!=")
+        case BinaryOperator.Pipeline => token("|>")
+        case BinaryOperator.Plus => token("+")
+        case BinaryOperator.StrictEqual => token("===")
+        case BinaryOperator.StrictNotEqual => token("!==")
+      }
+      space()
+      print(Some(right), Some(node))
+    }
+    case LogicalExpression(op, left, right) => {
+      print(Some(left), Some(node))
+      space()
+      op match {
+        case LogicalOperator.And => token("&&")
+        case LogicalOperator.NullishCoalescing => token("??")
+        case LogicalOperator.Or => token("||")
+      }
+      space()
+      print(Some(right), Some(node))
     }
     case BindExpression(obj, callee) => {
       print(Some(obj), Some(node))
@@ -1590,7 +1636,7 @@ class CodeGenerator(
     (implicit options: PrinterOptions) =
     parameter.iterator.zipWithIndex.foreach((p, i) => {
       param(p, Some(parent))
-      if (i < parameter.length) token(","); space()
+      if (i < parameter.length - 1) token(","); space()
     })
 
   private def predicate(
@@ -1650,11 +1696,35 @@ class CodeGenerator(
       case FunctionExpression(id, _, _, _, _) => id
       case TSDeclareFunction(id, _, _, _) => id
     }
-    print(id, Some(node))
+    
     id match {
-      case Some(id) => param(id)
+      case Some(id) => print(id, Some(node))
       case _ => ()
     }
+
+    val tp = node match {
+      case d: FunctionDeclaration => d.typeParameters
+      case e: FunctionExpression => e.typeParameters
+      case d: TSDeclareFunction => d.typeParameters
+    }
+    print(tp, Some(node))
+
+    val params = node match {
+      case FunctionDeclaration(_, p, _, _, _) => p
+      case FunctionExpression(_, p, _, _, _) => p
+      case TSDeclareFunction(_, _, p, _) => p
+    }
+    token("(")
+    parameters(params, node)
+    token(")")
+
+    val rp = node match {
+      case d: FunctionDeclaration => d.returnType
+      case e: FunctionExpression => e.returnType
+      case d: TSDeclareFunction => d.returnType
+    }
+    print(rp, Some(node), false)
+    _noLineTerminator = false
 
     node match {
       case d: FunctionDeclaration => predicate(d)
