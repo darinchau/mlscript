@@ -70,7 +70,7 @@ class CodeGenerationSuite extends munit.FunSuite:
     {
       val res = CodeGenerator(CallExpression(Identifier("foo")(None, None, None),
         List(Identifier("bar")(None, None, None), Identifier("baz")(None, None, None)))(None, None, None), format, sourceMap).generate()
-      assertEquals(res.code, "foo(bar, baz, )")
+      assertEquals(res.code, "foo(bar, baz)")
     }
   }
   test("Code Generation - Flow") {
@@ -115,5 +115,109 @@ class CodeGenerationSuite extends munit.FunSuite:
           TSEnumMember(Identifier("baz")(None, None, None))(None, None, None))
       )(None, None, None), format, sourceMap).generate()
       assertEquals(res.code, "enum foo {bar,baz,}")
+    }
+  }
+  test("Code Generation - Comprehensive Tests") {
+    {
+      val res = CodeGenerator(
+        File(Program(
+          List[Node with Statement](
+            ClassDeclaration(
+              Identifier("Optional")(None, None, None),
+              None,
+              ClassBody(List(
+                ClassProperty(Identifier("type")(None, None, None))(None, None, None)
+              ))(None, None, None)
+            )(None, None, None),
+            ClassDeclaration(
+              Identifier("Some")(None, None, None), Some(Identifier("Optional")(None, None, None)),
+              ClassBody(List(
+                ClassProperty(Identifier("type")(None, None, None), Some(StringLiteral("\"Some\"")(None, None, None)))(None, None, None),
+                ClassProperty(Identifier("value")(None, None, None))(None, None, None),
+                ClassMethod(
+                  Some(ClassMethodKind.Constructor),
+                  Identifier("constructor")(None, None, None),
+                  List[Identifier | Node with Pattern | RestElement | TSParameterProperty](Identifier("v")(None, None, None)),
+                  BlockStatement(
+                    List[Node with Statement](
+                      ExpressionStatement(CallExpression(Super()(None, None, None), List())(None, None, None))(None, None, None),
+                      ExpressionStatement(AssignmentExpression("=",
+                        MemberExpression(ThisExpression()(None, None, None), Identifier("value")(None, None, None))(None, None, None),
+                        Identifier("v")(None, None, None))(None, None, None))(None, None, None)
+                    )
+                  )(None, None, None)
+                )(None, None, None)
+              ))(None, None, None)
+            )(None, None, None),
+            ClassDeclaration(
+              Identifier("None")(None, None, None), Some(Identifier("Optional")(None, None, None)),
+              ClassBody(List(
+                ClassProperty(Identifier("type")(None, None, None), Some(StringLiteral("\"None\"")(None, None, None)))(None, None, None)
+              ))(None, None, None)
+            )(None, None, None),
+            FunctionDeclaration(
+              Some(Identifier("getOrElse")(None, None, None)),
+              List[Identifier | Node with Pattern | RestElement](
+                Identifier("opt")(None, None, None),
+                Identifier("deflt")(None, None, None)
+              ),
+              BlockStatement(
+                List[Node with Statement](
+                  IfStatement(
+                    BinaryExpression(
+                      BinaryOperator.StrictEqual,
+                      MemberExpression(Identifier("opt")(None, None, None), Identifier("type")(None, None, None))(None, None, None),
+                      StringLiteral("\"Some\"")(None, None, None)
+                    )(None, None, None),
+                    ReturnStatement(Some(
+                      MemberExpression(Identifier("opt")(None, None, None), Identifier("value")(None, None, None))(None, None, None)
+                    ))(None, None, None),
+                    Some(ReturnStatement(Some(Identifier("deflt")(None, None, None)))(None, None, None))
+                  )(None, None, None)
+                )
+              )(None, None, None)
+            )(None, None, None),
+            VariableDeclaration(
+              VariableDeclarationKind.Const,
+              List(
+                VariableDeclarator(Identifier("foo")(None, None, None), Some(
+                  NewExpression(Identifier("Some")(None, None, None),
+                    List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder](
+                      NumericLiteral(42)(None, None, None)
+                    ))(None, None, None)
+                ))(None, None, None),
+                VariableDeclarator(Identifier("bar")(None, None, None), Some(
+                  NewExpression(Identifier("None")(None, None, None),
+                    List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder]())(None, None, None)
+                ))(None, None, None)
+              )
+            )(None, None, None),
+            ExpressionStatement(
+              CallExpression(
+                MemberExpression(Identifier("console")(None, None, None), Identifier("log")(None, None, None))(None, None, None),
+                List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder](
+                  CallExpression(Identifier("getOrElse")(None, None, None),
+                    List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder](
+                    Identifier("foo")(None, None, None), NumericLiteral(0)(None, None, None)
+                  ))(None, None, None)
+                )
+              )(None, None, None)
+            )(None, None, None),
+            ExpressionStatement(
+              CallExpression(
+                MemberExpression(Identifier("console")(None, None, None), Identifier("log")(None, None, None))(None, None, None),
+                List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder](
+                  CallExpression(Identifier("getOrElse")(None, None, None),
+                    List[Node with Expression | SpreadElement | JSXNamespacedName | ArgumentPlaceholder](
+                    Identifier("bar")(None, None, None), NumericLiteral(0)(None, None, None)
+                  ))(None, None, None)
+                )
+              )(None, None, None)
+            )(None, None, None)
+          ),
+          sourceFile = ""
+        )(None, None, None))(None, None, None), format, sourceMap
+      ).generate()
+      assertEquals(res.code, "class Optional {type;}class Some extends Optional {type = \"Some\";value;constructor(v ) {super();this.value = v;}}class None extends Optional {type = \"None\";}function getOrElse(opt, deflt ) {if (opt.type === \"Some\") {return opt.value;} else return deflt;} const foo = new Some(42),bar = new None();console.log(getOrElse(foo, 0));console.log(getOrElse(bar, 0));")
     }
   }

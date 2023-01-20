@@ -115,6 +115,72 @@ class CodeGenerator(
           printSequence(body, node, PrintSequenceOptions(indent = Some(true)))
           sourceWithOffset(LocationType.End, node.location, 0, -1)
           rightBrace()
+    case p @ ClassPrivateProperty(key, value, dec, static) =>
+      printJoin(dec, node, PrintSequenceOptions())
+      if (static) word("static"); space()
+      print(Some(key), Some(node))
+      print(p.typeAnnotation, Some(node))
+      if (value.isDefined) {
+        space(); token("="); space()
+        print(value, Some(node))
+      }
+      semicolon()
+    case method @ ClassMethod(kind, key, params, body, computed, _, generator, async) =>
+      printJoin(method.decorators, node, PrintSequenceOptions())
+      // TODO: catch up
+      tsPrintClassMemberModifiers(method)
+      kind match {
+        case Some(ClassMethodKind.Getter) => word("get"); space()
+        case Some(ClassMethodKind.Setter) => word("set"); space()
+        case _ => ()
+      }
+      if (async) word("async", true)
+      kind match {
+        case Some(ClassMethodKind.Method) if (generator) => token("*")
+        case _ => ()
+      }
+      if (computed) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+      }
+      else print(Some(key), Some(node))
+      print(method.typeParameters, Some(node))
+      token("(")
+      parameters(params, method)
+      token(")")
+      print(method.returnType, Some(node), false)
+      _noLineTerminator = false
+      space()
+      print(Some(body), Some(node))
+    case method @ ClassPrivateMethod(kind, key, params, body, _) =>
+      printJoin(method.decorators, node, PrintSequenceOptions())
+      // TODO: catch up
+      tsPrintClassMemberModifiers(method)
+      kind match {
+        case Some(ClassPrivateMethodKind.Getter) => word("get"); space()
+        case Some(ClassPrivateMethodKind.Setter) => word("set"); space()
+        case _ => ()
+      }
+      if (method.async.getOrElse(false)) word("async", true)
+      kind match {
+        case Some(ClassPrivateMethodKind.Method) if (method.generator.getOrElse(false)) => token("*")
+        case _ => ()
+      }
+      if (method.computed.getOrElse(false)) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+      }
+      else print(Some(key), Some(node))
+      print(method.typeParameters, Some(node))
+      token("(")
+      parameters(params, method)
+      token(")")
+      print(method.returnType, Some(node), false)
+      _noLineTerminator = false
+      space()
+      print(Some(body), Some(node))
     // END classes.ts
     // BEGIN flow.ts
     
@@ -213,6 +279,30 @@ class CodeGenerator(
     }
     // To be continued...
     // END flow.ts
+    // BEGIN methods.ts
+    case exp @ FunctionExpression(_, _, body, _, _) =>
+      functionHead(exp)
+      space()
+      print(Some(body), Some(node))
+    case dec @ FunctionDeclaration(_, _, body, _, _) =>
+      functionHead(dec)
+      space()
+      print(Some(body), Some(node))
+    case exp @ ArrowFunctionExpression(params, body, async, _) =>
+      if (async) word("async", true); space()
+      print(exp.typeParameters, Some(node))
+      token("(")
+      parameters(params, node)
+      token(")")
+      print(exp.returnType, Some(node))
+      _noLineTerminator = true
+      predicate(exp, true)
+      space()
+      printInnerComments()
+      token("=>")
+      space()
+      print(Some(body), Some(node))
+    // END methods.ts
 
     // BEGIN modules.ts
     case node @ ImportSpecifier(local, imported) =>
@@ -259,12 +349,290 @@ class CodeGenerator(
       print(Some(exported), Some(node))
     // To be continued...
     // END modules.ts
+    // BEGIN statements.ts
+    case s @ WithStatement(obj, _) =>
+      word("with")
+      space()
+      token("(")
+      print(Some(obj), Some(node))
+      token(")")
+      printBlock(s.body, node)
+    case IfStatement(test, cons, alt) =>
+      word("if"); space(); token("(")
+      print(Some(test), Some(node))
+      token(")"); space()
+      token("{"); newline(); indent()
+      printAndIndentOnComments(cons, node)
+      dedent(); newline(); token("}")
+      alt match {
+        case Some(alt) =>
+          space(); word("else")
+          printAndIndentOnComments(alt, node)
+        case _ => ()
+      }
+    case ForStatement(init, test, update, body) =>
+      word("for"); space(); token("(")
+      print(init, Some(node))(options.derive(inFor = options.inForStatementInitCounter + 1))
+      token(";")
+      if (test.isDefined) space(); print(test, Some(node))
+      token(";")
+      if (update.isDefined) space(); print(update, Some(node))
+      token(")")
+      printBlock(body, node)
+    case WhileStatement(test, body) =>
+      word("while"); space(); token("(")
+      print(Some(test), Some(node))
+      token(")")
+      printBlock(body, node)
+    case ForInStatement(left, right, body) =>
+      word("for"); space()
+      noIndentInnerCommentsHere()
+      token("(")
+      print(Some(left), Some(node))
+      space(); word("in"); space()
+      print(Some(right), Some(node))
+      token(")")
+      printBlock(body, node)
+    case ForOfStatement(left, right, body, await) =>
+      word("for"); space()
+      if (await) word("await"); space()
+      noIndentInnerCommentsHere()
+      token("(")
+      print(Some(left), Some(node))
+      space(); word("of"); space()
+      print(Some(right), Some(node))
+      token(")")
+      printBlock(body, node)
+    case DoWhileStatement(test, body) =>
+      word("do"); space()
+      print(Some(body), Some(node))
+      space(); word("while"); space(); token("(")
+      print(Some(test), Some(body))
+      token(")"); semicolon()
+    case BreakStatement(label) =>
+      word("break")
+      printStatementAfterKeyword(label, node, true)
+    case ContinueStatement(label) =>
+      word("continue")
+      printStatementAfterKeyword(label, node, true)
+    case ReturnStatement(arg) =>
+      word("return")
+      printStatementAfterKeyword(arg, node, false)
+    case ThrowStatement(arg) =>
+      word("throw")
+      printStatementAfterKeyword(Some(arg), node, false)
+    case LabeledStatement(label, body) =>
+      print(Some(label), Some(node))
+      token(";"); space()
+      print(Some(body), Some(node))
+    case TryStatement(block, handler, finalizer) =>
+      word("try"); space()
+      print(Some(block), Some(node))
+      space()
+      print(handler, Some(node))
+      if (finalizer.isDefined) space(); word("finally"); space(); print(finalizer, Some(node))
+    case CatchClause(param, body) =>
+      word("catch"); space()
+      param match {
+        case Some(p) =>
+          token("(")
+          print(param, Some(node))
+          p match {
+            case i: Identifier => print(i.typeAnnotation, Some(node))
+            case p: ArrayPattern => print(p.typeAnnotation, Some(node))
+            case p: ObjectPattern => print(p.typeAnnotation, Some(node))
+          }
+          token(")"); space()
+        case _ => ()
+      }
+      print(Some(body), Some(node))
+    case SwitchStatement(dis, cases) =>
+      word("switch"); space(); token("(")
+      print(Some(dis), Some(node))
+      token(")"); space(); token("{")
+      printSequence(cases, node, PrintSequenceOptions(indent = Some(true)))
+      token("}")
+    case SwitchCase(test, cons) =>
+      test match {
+        case Some(_) =>
+          word("case"); space()
+          print(test, Some(node))
+          token(":")
+        case _ =>
+          word("default"); token(":")
+      }
+      if (!cons.isEmpty) newline(); printSequence(cons, node, PrintSequenceOptions(indent = Some(true)))
+    case DebuggerStatement() => word("debugger"); semicolon()
+    case vd @ VariableDeclaration(kind, decs) =>
+      if (vd.declare.getOrElse(false)) word("declare"); space()
+      kind match {
+        case VariableDeclarationKind.Const => word("const", false)
+        case VariableDeclarationKind.Let => word("let", false)
+        case VariableDeclarationKind.Using => word("using", true)
+        case VariableDeclarationKind.Var => word("var", false)
+      }
+      space()
+      val isFor = parent match {
+        case Some(p) => CodeGenerator.isFor(p)
+        case _ => false
+      }
+      val hasInits = if (!isFor) decs.foldLeft(false)((r, d) => if (d.init.isDefined) true else r) else false
+      if (hasInits)
+        printList(decs, node, PrintSequenceOptions(separator = Some((p: Printer) => {
+          p.token(","); p.newline()
+        }), indent = Some(decs.length > 1)))
+      else
+        printList(decs, node, PrintSequenceOptions(indent = Some(decs.length > 1)))
+      if (isFor)
+        parent match {
+          case Some(p: ForStatement) =>
+            p.init match {
+              case Some(value) if (value == node) => ()
+              case _ => semicolon()
+            }
+          case Some(p: ForInStatement) if (p.left == node) => ()
+          case Some(p: ForOfStatement) if (p.left == node) => ()
+          case _ => semicolon()
+        }
+      else semicolon()
+    case dec @ VariableDeclarator(id, init) =>
+      print(Some(id), Some(node))
+      if (dec.definite.getOrElse(false)) token("!")
+      if (init.isDefined) {
+        space(); token("="); space()
+        print(init, Some(node))
+      }
+    // END statements.ts
+    // BEGIN types.ts
+    case Identifier(name) => word(name)
+    case _: ArgumentPlaceholder => token("?")
+    case RestElement(arg) =>
+      token("...")
+      print(Some(arg), Some(node))
+    case SpreadElement(arg) =>
+      token("...")
+      print(Some(arg), Some(node))
+    case exp @ ObjectExpression(prop) =>
+      token("{")
+      if (!prop.isEmpty) {
+        space()
+        printList(prop, node, PrintSequenceOptions(indent = Some(true), statement = Some(true)))
+        space()
+      }
+      sourceWithOffset(LocationType.End, exp.location, 0, -1)
+      token("}")
+    case p @ ObjectPattern(prop) =>
+      token("{")
+      if (!prop.isEmpty) {
+        space()
+        printList(prop, node, PrintSequenceOptions(indent = Some(true), statement = Some(true)))
+        space()
+      }
+      sourceWithOffset(LocationType.End, p.location, 0, -1)
+      token("}")
+    case m @ ObjectMethod(kind, key, params, body, computed, generator, async) =>
+      printJoin(m.decorators, node, PrintSequenceOptions())
+      kind match {
+        case Some(ObjectMethodKind.Getter) => word("get"); space()
+        case Some(ObjectMethodKind.Setter) => word("set"); space()
+        case _ => ()
+      }
+      if (async) word("async", true)
+      kind match {
+        case Some(ObjectMethodKind.Method) if (generator) => token("*")
+        case Some(ObjectMethodKind.Init) if (generator) => token("*")
+        case _ => ()
+      }
+      if (computed) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+      }
+      else print(Some(key), Some(node))
+      print(m.typeParameters, Some(node))
+      token("(")
+      parameters(params, m)
+      token(")")
+      print(m.returnType, Some(node), false)
+      _noLineTerminator = false
+      space()
+      print(Some(body), Some(node))
+    case ObjectProperty(key, value, computed, shorthand, dec) =>
+      printJoin(dec, node, PrintSequenceOptions())
+      if (computed) {
+        token("[")
+        print(Some(key), Some(node))
+        token("]")
+
+        token(":"); space()
+        print(Some(value), Some(node))
+      }
+      else {
+        print(Some(key), Some(node))
+
+        if (!shorthand)
+          key match {
+            case key: Identifier => value match {
+              case value: Identifier if (key.name.equals(value.name)) =>
+                token(":"); space()
+                print(Some(value), Some(node))
+              case _ => ()
+            }
+            case _ => ()
+          }
+      }
+    case ArrayExpression(ele) =>
+      token("[")
+      ele.iterator.zipWithIndex.foreach((e, i) => e match {
+        case Some(_) =>
+          if (i > 0) space()
+          print(e, Some(node))
+          if (i < ele.length - 1) token(",")
+        case _ => token(",")
+      })
+      token("]")
+    case ArrayPattern(ele) =>
+      token("[")
+      ele.iterator.zipWithIndex.foreach((e, i) => e match {
+        case Some(_) =>
+          if (i > 0) space()
+          print(e, Some(node))
+          if (i < ele.length - 1) token(",")
+        case _ => token(",")
+      })
+      token("]")
+    case RecordExpression(props) =>
+      token("{|")
+      if (!props.isEmpty) {
+        space()
+        printList(props, node, PrintSequenceOptions(indent = Some(true), statement = Some(true)))
+        space()
+      }
+      token("|}")
+    case TupleExpression(ele) =>
+      token("[|")
+      ele.iterator.zipWithIndex.foreach((e, i) => {
+        if (i > 0) space()
+        print(Some(e), Some(node))
+        if (i < ele.length - 1) token(",")
+      })
+      token("|]")
+    case RegExpLiteral(pattern, flags) => word(s"/$pattern/$flags")
+    case BooleanLiteral(value) => if (value) word("true") else word("false")
+    case StringLiteral(s) => token(s)
+    case NullLiteral() => word("null")
+    case NumericLiteral(value) => number(value.toString())
+    case BigIntLiteral(value) => word(value)
+    case DecimalLiteral(value) => word(value)
+    case TopicReference() => token("#")
+    case PipelineTopicExpression(exp) => print(Some(exp), Some(node))
+    case PipelineBareFunction(callee) => print(Some(callee), Some(node))
+    case PipelinePrimaryTopicReference() => token("#")
+    // END types.ts
     case ThisExpression() => word("this")
     case Super() => word("super")
     case Import() => word("import")
     case EmptyStatement() => semicolon(true)
-    case DebuggerStatement() => { word("debugger"); semicolon() }
-    case PipelinePrimaryTopicReference() => token("#")
     case TSAnyKeyword() => word("any")
     case TSBigIntKeyword() => word("bigint")
     case TSUnknownKeyword() => word("unknown")
@@ -507,7 +875,49 @@ class CodeGenerator(
       else token(op)
       space()
       print(Some(right), Some(node))
-      token(")")
+      if (parens) token(")")
+    }
+    case BinaryExpression(op, left, right) => {
+      print(Some(left), Some(node))
+      space()
+      op match {
+        case BinaryOperator.BitwiseAnd => token("&")
+        case BinaryOperator.BitwiseLeftShift => token("<<")
+        case BinaryOperator.BitwiseOr => token("|")
+        case BinaryOperator.BitwiseRightShift => token(">>")
+        case BinaryOperator.BitwiseUnsignedRightShift => token(">>>")
+        case BinaryOperator.BitwiseXor => token("^")
+        case BinaryOperator.Divide => token("/")
+        case BinaryOperator.Equal => token("==")
+        case BinaryOperator.Exponentiation => token("**")
+        case BinaryOperator.GreaterThan => token(">")
+        case BinaryOperator.GreaterThanOrEqual => token(">=")
+        case BinaryOperator.In => word("in")
+        case BinaryOperator.InstanceOf => word("instanceof")
+        case BinaryOperator.LessThan => token("<")
+        case BinaryOperator.LessThanOrEqual => token("<=")
+        case BinaryOperator.Minus => token("-")
+        case BinaryOperator.Modolus => token("%")
+        case BinaryOperator.Multiplication => token("*")
+        case BinaryOperator.NotEqual => token("!=")
+        case BinaryOperator.Pipeline => token("|>")
+        case BinaryOperator.Plus => token("+")
+        case BinaryOperator.StrictEqual => token("===")
+        case BinaryOperator.StrictNotEqual => token("!==")
+      }
+      space()
+      print(Some(right), Some(node))
+    }
+    case LogicalExpression(op, left, right) => {
+      print(Some(left), Some(node))
+      space()
+      op match {
+        case LogicalOperator.And => token("&&")
+        case LogicalOperator.NullishCoalescing => token("??")
+        case LogicalOperator.Or => token("||")
+      }
+      space()
+      print(Some(right), Some(node))
     }
     case BindExpression(obj, callee) => {
       print(Some(obj), Some(node))
@@ -809,7 +1219,7 @@ class CodeGenerator(
     case TSCallSignatureDeclaration(tp, params, anno) => {
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")")
       // TODO: No return type found
       print(anno, Some(node))
@@ -819,7 +1229,7 @@ class CodeGenerator(
       word("new"); space()
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")")
       // TODO: No return type found
       print(anno, Some(node))
@@ -854,7 +1264,7 @@ class CodeGenerator(
 
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")")
       // TODO: No return type found
       print(anno, Some(node))
@@ -877,7 +1287,7 @@ class CodeGenerator(
     case TSFunctionType(tp, params, anno) => {
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")"); space(); token("=>"); space()
       // TODO: No return type found
       print(anno, Some(node))
@@ -891,7 +1301,7 @@ class CodeGenerator(
 
       print(tp, Some(node))
       token("(")
-      // TODO: _parameters(parameters, node)
+      parameters(params, node)
       token(")"); space(); token("=>"); space()
       // TODO: No return type found
       print(anno, Some(node))
@@ -1107,8 +1517,6 @@ class CodeGenerator(
         }
       }
       print(Some(id), Some(node))
-      // TODO: should body be optional
-
       def run (md: TSModuleDeclaration): Unit = {
         token(".")
         print(Some(md.id), Some(md))
@@ -1166,10 +1574,18 @@ class CodeGenerator(
       word("export"); space(); token("as"); space(); word("namespace"); space()
       print(Some(id), Some(node))
     }
-    case Identifier(name) => word(name)
     case _ => () // TODO
 
   def generate() = super.generate(ast)
+
+  private def printStatementAfterKeyword(node: Option[Node], parent: Node, isLabel: Boolean)(implicit options: PrinterOptions) =
+    node match {
+      case Some(node) =>
+        space()
+        printTerminatorless(node, parent, isLabel)
+        semicolon()
+      case _ => semicolon()
+    }
 
   private def tsPrintBraced(members: List[Node], node: Node)(implicit options: PrinterOptions) = {
     token("{")
@@ -1282,6 +1698,13 @@ class CodeGenerator(
     print(Some(parameter), parent)
   }
 
+  private def parameters(parameter: List[Identifier | RestElement | Node with Pattern | TSParameterProperty], parent: Node)
+    (implicit options: PrinterOptions) =
+    parameter.iterator.zipWithIndex.foreach((p, i) => {
+      param(p, Some(parent))
+      if (i < parameter.length - 1) token(","); space()
+    })
+
   private def predicate(
     node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression,
     noLineTerminatorAfter: Boolean = false
@@ -1339,11 +1762,35 @@ class CodeGenerator(
       case FunctionExpression(id, _, _, _, _) => id
       case TSDeclareFunction(id, _, _, _) => id
     }
-    print(id, Some(node))
+    
     id match {
-      case Some(id) => param(id)
+      case Some(id) => print(id, Some(node))
       case _ => ()
     }
+
+    val tp = node match {
+      case d: FunctionDeclaration => d.typeParameters
+      case e: FunctionExpression => e.typeParameters
+      case d: TSDeclareFunction => d.typeParameters
+    }
+    print(tp, Some(node))
+
+    val params = node match {
+      case FunctionDeclaration(_, p, _, _, _) => p
+      case FunctionExpression(_, p, _, _, _) => p
+      case TSDeclareFunction(_, _, p, _) => p
+    }
+    token("(")
+    parameters(params, node)
+    token(")")
+
+    val rp = node match {
+      case d: FunctionDeclaration => d.returnType
+      case e: FunctionExpression => e.returnType
+      case d: TSDeclareFunction => d.returnType
+    }
+    print(rp, Some(node), false)
+    _noLineTerminator = false
 
     node match {
       case d: FunctionDeclaration => predicate(d)
@@ -1371,4 +1818,11 @@ object CodeGenerator:
       case p: ParenthesizedExpression => false
       case e: CallExpression => !isDecoratorMemberExpression(e.callee)
       case _ => !isDecoratorMemberExpression(node)
+    }
+  def isFor(node: Node): Boolean =
+    node match {
+      case _: ForInStatement => true
+      case _: ForOfStatement => true
+      case _: ForStatement => true
+      case _ => false
     }

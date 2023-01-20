@@ -36,7 +36,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
   private val printedComments = new HashSet[Comment]()
   private var indentLevel: Int = 0
   
-  private var _noLineTerminator = false
+  protected var _noLineTerminator = false
   private var _endsWithWord = false
   private var _endsWithInteger = false
   protected  var _endWithInnerRaw = false
@@ -395,7 +395,7 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
           }
 
           opts.separator match {
-            case Some(sep) if (i < nodes.length) => sep(this)
+            case Some(sep) if (i < nodes.length - 1) => sep(this)
             case _ => ()
           }
 
@@ -426,11 +426,11 @@ abstract class Printer(format: Format, map: SourceMapBuilder) {
     if (needIndent) dedent()
   }
 
-  def printBlock(parent: Node with BlockParent)(implicit options: PrinterOptions): Unit = ??? // TODO: move body to BlockParent
-  /*parent.body match {
-    case es: EmptyStatement => { space(); print(Some(es), Some(parent)) }
-    case _ => print(Some(parent.body), Some(parent))
-  }*/
+  def printBlock(body: Node, parent: Node)(implicit options: PrinterOptions): Unit =
+    parent match {
+      case _: EmptyStatement => { space(); print(Some(body), Some(parent)) }
+      case _ => print(Some(body), Some(parent))
+    }
 
   private def _printTrailingComments(node: Node, parent: Option[Node], lineOffset: Int = 0)(implicit options: PrinterOptions) = {
     val innerComments = node.innerComments
