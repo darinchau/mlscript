@@ -196,7 +196,7 @@ trait TSEntityName
 /**
  * A cover of Literals, Regular Expression Literals and Template Literals.
  */
-trait Literal
+trait Literal extends Expression
 
 /**
  * A cover of immutable objects and JSX elements. An object is immutable if no other properties can be defined once created.
@@ -231,7 +231,7 @@ trait UnaryLike
 /**
  * A cover of BindingPattern except Identifiers.
  */
-trait Pattern
+trait Pattern extends PatternLike
 
 /**
  * A cover of ClassExpression and ClassDeclaration, which share the same AST shape.
@@ -363,6 +363,34 @@ enum BinaryOperator:
   case LessThanOrEqual
   case Pipeline
 
+object BinaryOperator:
+  def from(op: String): Option[BinaryOperator] =
+    op match
+      case "+" => Some(Plus)
+      case "-" => Some(Minus)
+      case "/" => Some(Divide)
+      case "%" => Some(Modolus)
+      case "*" => Some(Multiplication)
+      case "**" => Some(Exponentiation)
+      case "&" => Some(BitwiseAnd)
+      case "|" => Some(BitwiseOr)
+      case ">>" => Some(BitwiseRightShift)
+      case ">>>" => Some(BitwiseUnsignedRightShift)
+      case "<<" => Some(BitwiseLeftShift)
+      case "^" => Some(BitwiseXor)
+      case "==" => Some(Equal)
+      case "===" => Some(StrictEqual)
+      case "!=" => Some(NotEqual)
+      case "!==" => Some(StrictNotEqual)
+      case "in" => Some(In)
+      case "instanceof" => Some(InstanceOf)
+      case ">" => Some(GreaterThan)
+      case "<" => Some(LessThan)
+      case ">=" => Some(GreaterThanOrEqual)
+      case "<=" => Some(LessThanOrEqual)
+      case "|>" => Some(Pipeline)
+      case _ => None
+
 case class BinaryExpression(
   val operator: BinaryOperator,
   val left: Node with Expression | PrivateName,
@@ -480,7 +508,7 @@ case class LabeledStatement(val label: Identifier, val body: Node with Statement
 case class StringLiteral(val value: String)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression with Pureish with Literal with Immutable
 
-case class NumericLiteral(val value: Int)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class NumericLiteral(val value: Int | Double)(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Expression with Pureish with Literal with Immutable
 
 case class NullLiteral()(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
@@ -496,6 +524,14 @@ enum LogicalOperator:
   case Or
   case And
   case NullishCoalescing
+
+object LogicalOperator:
+  def from(op: String): Option[LogicalOperator] =
+    op match
+      case "||" => Some(Or)
+      case "&&" => Some(And)
+      case "??" => Some(NullishCoalescing)
+      case _ => None
 
 case class LogicalExpression(
   val operator: LogicalOperator,
@@ -649,7 +685,7 @@ case class AssignmentPattern(
   var decorators: Option[List[Decorator]] = None
   var typeAnnotation: Option[TypeAnnotation | TSTypeAnnotation | Noop] = None
 
-case class ArrayPattern(val elements: List[Option[PatternLike | LVal]])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
+case class ArrayPattern(val elements: List[Option[Node with PatternLike | Node with LVal]])(val start: Option[Int], val end: Option[Int], val location: Option[SourceLocation])
     extends Node with Standardized with Pattern with PatternLike with LVal:
   var decorators: Option[List[Decorator]] = None
   var optional: Option[Boolean] = None
