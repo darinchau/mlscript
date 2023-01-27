@@ -162,7 +162,7 @@ object ReplHost {
   /**
     * If the query is `Empty`, we will receive this.
     */
-  final object Empty extends Reply {
+  object Empty extends Reply {
     override def map(f: Str => Reply): Reply = this
     override def toString(): Str = "[empty]"
   }
