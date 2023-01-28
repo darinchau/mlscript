@@ -9,7 +9,7 @@ import scala.collection.mutable.{Map => MutMap}
 import scala.collection.immutable
 import mlscript.utils._, shorthands._
 import mlscript.codegen.typescript.TsTypegenCodeBuilder
-
+import scala.concurrent.duration.Duration
 
 abstract class ModeType {
   def expectTypeErrors: Bool
@@ -41,12 +41,8 @@ abstract class ModeType {
 class DiffTests
   extends munit.FunSuite
 {
-  import scala.concurrent.duration.Duration
 
-  override val munitTimeout =
-    if (sys.env.get("CI").isDefined) Duration(25, "s")
-    else Duration(10, "s")
-  
+
   /**  Hook for dependent projects, like the monomorphizer. */
   def postProcess(mode: ModeType, basePath: Ls[Str], testName: Str, unit: TypingUnit): Ls[Str] = Nil
   
@@ -62,6 +58,8 @@ class DiffTests
       // validExt(file.ext) && filter(fileName)
       validExt(file.ext) && filter(file.relativeTo(pwd))
   }
+
+  override val munitTimeout = TimeLimit
   
   files.foreach { file =>
         val basePath = file.segments.drop(dir.segmentCount).toList.init
@@ -781,6 +779,10 @@ class DiffTests
 }
 
 object DiffTests {
+  private val TimeLimit =
+    if (sys.env.get("CI").isDefined) Duration(25, "s")
+    else Duration(10, "s")
+
   private val pwd = os.pwd
   private val dir = pwd/"shared"/"src"/"test"/"diff"
   
