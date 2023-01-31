@@ -9,7 +9,9 @@ import scala.collection.mutable.{Map => MutMap}
 import scala.collection.immutable
 import mlscript.utils._, shorthands._
 import mlscript.codegen.typescript.TsTypegenCodeBuilder
-import scala.concurrent.duration.Duration
+import org.scalatest.{funsuite, ParallelTestExecution}
+import org.scalatest.time._
+import org.scalatest.concurrent.{TimeLimitedTests, Signaler}
 
 abstract class ModeType {
   def expectTypeErrors: Bool
@@ -39,15 +41,18 @@ abstract class ModeType {
 }
 
 class DiffTests
-  extends munit.FunSuite
+  extends funsuite.AnyFunSuite
+  with ParallelTestExecution
+  with TimeLimitedTests
 {
+
 
 
   /**  Hook for dependent projects, like the monomorphizer. */
   def postProcess(mode: ModeType, basePath: Ls[Str], testName: Str, unit: TypingUnit): Ls[Str] = Nil
   
   
-  private val inParallel = true
+  private val inParallel = isInstanceOf[ParallelTestExecution]
   
   import DiffTests._
 
@@ -59,7 +64,21 @@ class DiffTests
       validExt(file.ext) && filter(file.relativeTo(pwd))
   }
 
-  override val munitTimeout = TimeLimit
+  val timeLimit = TimeLimit
+
+  override val defaultTestSignaler: Signaler = new Signaler {
+    @annotation.nowarn("msg=method stop in class Thread is deprecated") def apply(testThread: Thread): Unit = {
+      println(s"!! Test at $testThread has run out out time !! stopping..." +
+        "\n\tNote: you can increase this limit by changing DiffTests.TimeLimit")
+      // * Thread.stop() is considered bad practice because normally it's better to implement proper logic
+      // * to terminate threads gracefully, avoiding leaving applications in a bad state.
+      // * But here we DGAF since all the test is doing is runnign a type checker and some Node REPL,
+      // * which would be a much bigger pain to make receptive to "gentle" interruption.
+      // * It would feel extremely wrong to intersperse the pure type checker algorithms
+      // * with ugly `Thread.isInterrupted` checks everywhere...
+      testThread.stop()
+    }
+  }
   
   files.foreach { file =>
         val basePath = file.segments.drop(dir.segmentCount).toList.init
@@ -780,8 +799,8 @@ class DiffTests
 
 object DiffTests {
   private val TimeLimit =
-    if (sys.env.get("CI").isDefined) Duration(25, "s")
-    else Duration(10, "s")
+    if (sys.env.get("CI").isDefined) Span(25, Seconds)
+    else Span(10, Seconds)
 
   private val pwd = os.pwd
   private val dir = pwd/"shared"/"src"/"test"/"diff"

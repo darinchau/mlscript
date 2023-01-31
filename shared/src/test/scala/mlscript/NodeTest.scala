@@ -1,6 +1,6 @@
 package mlscript
 
-class NodeTests extends munit.FunSuite {
+class NodeTests extends org.scalatest.funsuite.AnyFunSuite {
   
   test("node version") {
     
