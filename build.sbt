@@ -37,16 +37,10 @@ lazy val mlscript = crossProject(JSPlatform, JVMPlatform).in(file("."))
       LeakingSealed, Overloading,
       Option2Iterable, IterableOps, ListAppend
     ),
-    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.12" % Test,
     libraryDependencies += "com.lihaoyi" %%% "sourcecode" % "0.3.0",
     libraryDependencies += "com.lihaoyi" %%% "fastparse" % "2.3.3",
     libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.8.0",
-    // 
-    watchSources += WatchSource(
-      sourceDirectory.value.getParentFile().getParentFile()/"shared/src/test/diff", "*.fun", NothingFilter),
-    watchSources += WatchSource(
-      sourceDirectory.value.getParentFile().getParentFile()/"shared/src/test/diff", "*.mls", NothingFilter),
-    Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oC"),
+    Test / unmanagedSources / excludeFilter := "*.scala", // run test in main project instead.
   )
   .jsSettings(
     scalaJSUseMainModuleInitializer := true,
@@ -56,20 +50,26 @@ lazy val mlscript = crossProject(JSPlatform, JVMPlatform).in(file("."))
 lazy val mlscriptJVM = mlscript.jvm
 lazy val mlscriptJS = mlscript.js
 
-lazy val mlscript_codegen = crossProject(JSPlatform, JVMPlatform).in(file("codegen"))
+lazy val main = crossProject(JSPlatform, JVMPlatform).in(file("codegen"))
   .settings(
-    name := "mlscript-codegen",
+    name := "main",
     scalaVersion := "3.1.3",
     sourceDirectory := baseDirectory.value.getParentFile()/"shared",
+    Test / unmanagedSourceDirectories += sourceDirectory.value.getParentFile().getParentFile()/"shared"/"src"/"test"/"scala"/"mlscript",
     libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
     libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.12" % "test",
     watchSources += WatchSource(
       baseDirectory.value.getParentFile()/"shared"/"test"/"diff", "*.mls", NothingFilter),
+    watchSources += WatchSource(
+      sourceDirectory.value.getParentFile().getParentFile()/"shared/src/test/diff", "*.fun", NothingFilter),
+    watchSources += WatchSource(
+      sourceDirectory.value.getParentFile().getParentFile()/"shared/src/test/diff", "*.mls", NothingFilter),
+    Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oC"),
   )
   .dependsOn(mlscript)
 
-lazy val codegenJVM = mlscript_codegen.jvm
-lazy val codegenJS = mlscript_codegen.js
+lazy val mainJVM = main.jvm
+lazy val mainJS = main.js
 
 lazy val ts2mls = crossProject(JSPlatform, JVMPlatform).in(file("ts2mls"))
   .settings(
