@@ -137,7 +137,7 @@ if(b) then 1 else 2
 //│ TypingUnit {
 //│   class Lambda2$1$1([]) {fun apply = (f, g,) => f(g,)}
 //│   class Lambda1$2$2([]) {fun apply = (f,) => f}
-//│   Code(List('(' {new Lambda2$1$1([]) {}} ')'({new Lambda1$2$2([]) {}}, true,)))
+//│   Code(List('(' {new Lambda2$1$1([]) ‹›} ')'({new Lambda1$2$2([]) ‹›}, true,)))
 //│ }
 //│ Mono:
 //│ 
@@ -164,7 +164,7 @@ if(b) then 1 else 2
 //│ Lifted:
 //│ TypingUnit {
 //│   class Lambda1$1$1([]) {fun apply = (b,) => if (b) then true else false}
-//│   Code(List('(' {new Lambda1$1$1([]) {}} ')'(true,)))
+//│   Code(List('(' {new Lambda1$1$1([]) ‹›} ')'(true,)))
 //│ }
 //│ Mono:
 //│ 
@@ -242,7 +242,7 @@ count(new List(new List(new Nil(undefined, false), true), true))
 //│   class Nil$2([val l: |(|(List, Nil,), undefined,), val hasTail: Bool,]) {}
 //│   let l$2 = (lst,) => (lst).l
 //│   fun count$1 = (lst,) => {if ((lst).hasTail) then {if (is(l, undefined,)) then 1 else +(count$1(l,), 1,)} else 0}
-//│   Code(List(count$1(new List$1([new List$1([new Nil$2([undefined, false,]) {}, true,]) {}, true,]) {},)))
+//│   Code(List(count$1(new List$1([new List$1([new Nil$2([undefined, false,]) ‹›, true,]) ‹›, true,]) ‹›,)))
 //│ }
 //│ Mono:
 //│ 
@@ -296,7 +296,7 @@ fun add2(x) = x+2
 //│ TypingUnit {
 //│   class List$1([e: Int, tail: |(List, Nil,),]) {
 //│     fun map = (Int -> Int) -> List$1
-//│     fun map = (f,) => new List$1([f((this).e,), ((this).tail).map(f,),]) {}
+//│     fun map = (f,) => new List$1([f((this).e,), ((this).tail).map(f,),]) ‹›
 //│     fun count = () -> Int
 //│     fun count = () => +(1, ((this).tail).count(),)
 //│   }
@@ -304,7 +304,7 @@ fun add2(x) = x+2
 //│   class Lambda1$2$3([]) {fun apply = (x,) => +(x, 1,)}
 //│   class Lambda1$3$4([]) {fun apply = (x,) => add2$1(x,)}
 //│   fun add2$1 = (x,) => +(x, 2,)
-//│   Code(List((('(' new List$1([1, new List$1([2, new Nil$2([]) {},]) {},]) {} ')').map({new Lambda1$2$3([]) {}},)).map({new Lambda1$3$4([]) {}},)))
+//│   Code(List((('(' new List$1([1, new List$1([2, new Nil$2([]) ‹›,]) ‹›,]) ‹› ')').map({new Lambda1$2$3([]) ‹›},)).map({new Lambda1$3$4([]) ‹›},)))
 //│ }
 //│ Mono:
 //│ 
@@ -366,8 +366,8 @@ foo(generate(1))
 //│   }
 //│   class Nil$2([]) {fun count = () => 0}
 //│   fun foo$1 = (x,) => (x).count()
-//│   fun generate$2 = (x,) => {if (>(x, 0,)) then new List$1([x, generate$2(+(x, 1,),),]) {} else new Nil$2([]) {}}
-//│   Code(List(foo$1(new List$1([1, new List$1([2, new Nil$2([]) {},]) {},]) {},)))
+//│   fun generate$2 = (x,) => {if (>(x, 0,)) then new List$1([x, generate$2(+(x, 1,),),]) ‹› else new Nil$2([]) ‹›}
+//│   Code(List(foo$1(new List$1([1, new List$1([2, new Nil$2([]) ‹›,]) ‹›,]) ‹›,)))
 //│   Code(List(foo$1(generate$2(1,),)))
 //│ }
 //│ Mono:
@@ -415,7 +415,7 @@ foo(2)
 //│ TypingUnit {
 //│   class Lambda1$2$1([x,]) {fun apply = (f,) => f((this).x,)}
 //│   class Lambda1$3$2([]) {fun apply = (z,) => +(z, 1,)}
-//│   fun foo$1 = (x,) => {'(' {new Lambda1$2$1([x,]) {}} ')'({new Lambda1$3$2([]) {}},)}
+//│   fun foo$1 = (x,) => {'(' {new Lambda1$2$1([x,]) ‹›} ')'({new Lambda1$3$2([]) ‹›},)}
 //│   Code(List(foo$1(2,)))
 //│ }
 //│ Mono:
@@ -447,7 +447,7 @@ f(1)
 //│ Lifted:
 //│ TypingUnit {
 //│   class Lambda1$2$1([x,]) {fun apply = (y,) => f$1(+((this).x, y,),)}
-//│   fun f$1 = (x,) => {'(' {new Lambda1$2$1([x,]) {}} ')'(+(x, 1,),)}
+//│   fun f$1 = (x,) => {'(' {new Lambda1$2$1([x,]) ‹›} ')'(+(x, 1,),)}
 //│   Code(List(f$1(1,)))
 //│ }
 //│ Mono:
@@ -530,11 +530,11 @@ foo(new Lambda2(2))
 //│   class Nil$2([]) {fun count = () => 0}
 //│   class Lambda$3([]) {fun apply = (l,) => {(l).count()}}
 //│   class Lambda2$4([a: Int,]) {
-//│     fun apply = (l,) => {('(' new Cons$1([(this).a, l,]) {} ')').count()}
+//│     fun apply = (l,) => {('(' new Cons$1([(this).a, l,]) ‹› ')').count()}
 //│   }
-//│   fun foo$1 = (x,) => {+((x).apply(new Cons$1([1, new Nil$2([]) {},]) {},), (x).apply(new Nil$2([]) {},),)}
-//│   Code(List(foo$1(new Lambda$3([]) {},)))
-//│   Code(List(foo$1(new Lambda2$4([2,]) {},)))
+//│   fun foo$1 = (x,) => {+((x).apply(new Cons$1([1, new Nil$2([]) ‹›,]) ‹›,), (x).apply(new Nil$2([]) ‹›,),)}
+//│   Code(List(foo$1(new Lambda$3([]) ‹›,)))
+//│   Code(List(foo$1(new Lambda2$4([2,]) ‹›,)))
 //│ }
 //│ Mono:
 //│ 
@@ -604,11 +604,11 @@ foo(l => (new Cons(2, l)).count())
 //│   class Nil$2([]) {fun count = () => 0}
 //│   class Lambda1$2$3([]) {fun apply = (l,) => (l).count()}
 //│   class Lambda1$3$4([]) {
-//│     fun apply = (l,) => ('(' new Cons$1([2, l,]) {} ')').count()
+//│     fun apply = (l,) => ('(' new Cons$1([2, l,]) ‹› ')').count()
 //│   }
-//│   fun foo$1 = (x,) => {+(x(new Cons$1([1, new Nil$2([]) {},]) {},), x(new Nil$2([]) {},),)}
-//│   Code(List(foo$1({new Lambda1$2$3([]) {}},)))
-//│   Code(List(foo$1({new Lambda1$3$4([]) {}},)))
+//│   fun foo$1 = (x,) => {+(x(new Cons$1([1, new Nil$2([]) ‹›,]) ‹›,), x(new Nil$2([]) ‹›,),)}
+//│   Code(List(foo$1({new Lambda1$2$3([]) ‹›},)))
+//│   Code(List(foo$1({new Lambda1$3$4([]) ‹›},)))
 //│ }
 //│ Mono:
 //│ 
@@ -698,26 +698,26 @@ class C(e1: Exp, e2: Exp) extends Exp {
 //│     fun isEmpty = () => false
 //│   }
 //│   class E$2([]): Exp$1() {
-//│     fun derive = (x,) => {new E$2([]) {}}
+//│     fun derive = (x,) => {new E$2([]) ‹›}
 //│     fun isEmpty = () => {false}
 //│   }
 //│   class Ep$3([]): Exp$1() {
-//│     fun derive = (x,) => {new E$2([]) {}}
+//│     fun derive = (x,) => {new E$2([]) ‹›}
 //│     fun isEmpty = () => {true}
 //│   }
 //│   class Ch$4([i: Int,]): Exp$1() {
-//│     fun derive = (x,) => {if (==(x, (this).i,)) then new Ep$3([]) {} else new E$2([]) {}}
+//│     fun derive = (x,) => {if (==(x, (this).i,)) then new Ep$3([]) ‹› else new E$2([]) ‹›}
 //│     fun isEmpty = () => {false}
 //│   }
 //│   class A$5([e1: Exp, e2: Exp,]): Exp$1() {
-//│     fun derive = (x,) => {new A$5([((this).e1).derive(x,), ((this).e2).derive(x,),]) {}}
+//│     fun derive = (x,) => {new A$5([((this).e1).derive(x,), ((this).e2).derive(x,),]) ‹›}
 //│     fun isEmpty = () => {||(((this).e1).isEmpty(), ((this).e2).isEmpty(),)}
 //│   }
 //│   class C$6([e1: Exp, e2: Exp,]): Exp$1() {
-//│     fun derive = (x,) => {if (((this).e1).isEmpty()) then new A$5([new C$6([((this).e1).derive(x,), (this).e2,]) {}, ((this).e2).derive(x,),]) {} else new C$6([((this).e1).derive(x,), (this).e2,]) {}}
+//│     fun derive = (x,) => {if (((this).e1).isEmpty()) then new A$5([new C$6([((this).e1).derive(x,), (this).e2,]) ‹›, ((this).e2).derive(x,),]) ‹› else new C$6([((this).e1).derive(x,), (this).e2,]) ‹›}
 //│     fun isEmpty = () => {&&(((this).e1).isEmpty(), ((this).e2).isEmpty(),)}
 //│   }
-//│   Code(List((('(' new C$6([new Ch$4([1,]) {}, new A$5([new Ch$4([2,]) {}, new Ch$4([3,]) {},]) {},]) {} ')').derive(0,)).isEmpty()))
+//│   Code(List((('(' new C$6([new Ch$4([1,]) ‹›, new A$5([new Ch$4([2,]) ‹›, new Ch$4([3,]) ‹›,]) ‹›,]) ‹› ')').derive(0,)).isEmpty()))
 //│ }
 //│ Mono:
 //│ 
@@ -795,7 +795,7 @@ gen()
 //│   class List$1([l: |(List, Nil,), hasTail: Bool,]) {}
 //│   class Nil$2([hasTail: Bool,]) {}
 //│   let anyUnknown$2 = () => false
-//│   fun gen$1 = () => {if (anyUnknown) then new List$1([gen$1(), true,]) {} else new Nil$2([false,]) {}}
+//│   fun gen$1 = () => {if (anyUnknown) then new List$1([gen$1(), true,]) ‹› else new Nil$2([false,]) ‹›}
 //│   Code(List(gen$1()))
 //│ }
 //│ Mono:
@@ -837,7 +837,7 @@ class Foo(x: Int){
 //│     fun bar = (y,) => +((this).x, y,)
 //│     fun boo = (z,) => +((this).bar(z,), (this).x,)
 //│   }
-//│   Code(List(('(' new Foo$1([1,]) {} ')').boo(2,)))
+//│   Code(List(('(' new Foo$1([1,]) ‹› ')').boo(2,)))
 //│ }
 //│ Mono:
 //│ 
@@ -871,9 +871,9 @@ class OneInt(a: Int){
 //│ TypingUnit {
 //│   class OneInt$1([a: Int,]) {
 //│     fun fac = () -> Int
-//│     fun fac = () => {if ('(' >((this).a, 0,) ')') then ('(' new OneInt$1([-((this).a, 1,),]) {} ')').fac() else 1}
+//│     fun fac = () => {if ('(' >((this).a, 0,) ')') then ('(' new OneInt$1([-((this).a, 1,),]) ‹› ')').fac() else 1}
 //│   }
-//│   Code(List(('(' new OneInt$1([10,]) {} ')').fac()))
+//│   Code(List(('(' new OneInt$1([10,]) ‹› ')').fac()))
 //│ }
 //│ Mono:
 //│ 
@@ -958,7 +958,7 @@ class OneBool(b: Bool){
 //│ TypingUnit {
 //│   class OneInt$1([a: Int,]) {fun get = () => (this).a}
 //│   class OneBool$2([b: Bool,]) {fun get = () => (this).b}
-//│   Code(List(('(' if (b) then new OneInt$1([1,]) {} else new OneBool$2([true,]) {} ')').get()))
+//│   Code(List(('(' if (b) then new OneInt$1([1,]) ‹› else new OneBool$2([true,]) ‹› ')').get()))
 //│ }
 //│ Mono:
 //│ 
@@ -1010,7 +1010,7 @@ bar.car
 //│   fun baz$2 = (b: Bar$1,) => (b).foo(2,)
 //│   let bar$1 = () => Bar$1(42,)
 //│   Code(List(baz$2(bar,)))
-//│   Code(List(('(' new Car$2([]) {} ')').da(Bar$1(1337,),)))
+//│   Code(List(('(' new Car$2([]) ‹› ')').da(Bar$1(1337,),)))
 //│   Code(List((bar).car))
 //│ }
 //│ Mono:
@@ -1075,8 +1075,8 @@ class Sub2(c: Int) extends Sub(c+c){
 //│   class Sub$2([b: Int,]): Sup$1(+((this).b, (this).b,),) {}
 //│   class Sub2$3([c: Int,]): Sub$2(+((this).c, (this).c,),) {fun foo = () => +((this).a, (this).c,)}
 //│   let c$1 = () => 5
-//│   Code(List(('(' new Sub$2([10,]) {} ')').foo()))
-//│   Code(List(('(' new Sub2$3([c,]) {} ')').foo()))
+//│   Code(List(('(' new Sub$2([10,]) ‹› ')').foo()))
+//│   Code(List(('(' new Sub2$3([c,]) ‹› ')').foo()))
 //│ }
 //│ Mono:
 //│ 
@@ -1130,11 +1130,11 @@ class F2() extends Foo(x => x+2){}
 //│ TypingUnit {
 //│   class Foo$1([f: ->(Int, Int,),]) {fun foo = () => (this).f(1,)}
 //│   class F1$2_Lambda1$1$4([par$F1$2,]) {fun apply = (x,) => +(x, 1,)}
-//│   class F1$2([]): Foo$1({new F1$2_Lambda1$1$4([this,]) {}},) {}
+//│   class F1$2([]): Foo$1({new F1$2_Lambda1$1$4([this,]) ‹›},) {}
 //│   class F2$3_Lambda1$2$5([par$F2$3,]) {fun apply = (x,) => +(x, 2,)}
-//│   class F2$3([]): Foo$1({new F2$3_Lambda1$2$5([this,]) {}},) {}
-//│   Code(List(('(' new F1$2([]) {} ')').foo()))
-//│   Code(List(('(' new F2$3([]) {} ')').foo()))
+//│   class F2$3([]): Foo$1({new F2$3_Lambda1$2$5([this,]) ‹›},) {}
+//│   Code(List(('(' new F1$2([]) ‹› ')').foo()))
+//│   Code(List(('(' new F2$3([]) ‹› ')').foo()))
 //│ }
 //│ Mono:
 //│ 

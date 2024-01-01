@@ -473,12 +473,13 @@ trait TypingUnitImpl extends Located { self: TypingUnit =>
     case e => lastWords(s"Unexpected typing unit entity: $e")
   }.mkString("‹", "; ", "›")
 
-  def showDbgTop: Str = entities.iterator.map {
-    case t: Term => t.print(false)
-    case d: NuDecl => d.showDbg
-    case c: Constructor => c.showDbg
-    case e => lastWords(s"Unexpected typing unit entity: $e")
-  }.mkString("{", "; ", "}")
+  def showDbgTop: Str = showDbg
+  // def showDbgTop: Str = entities.iterator.map {
+  //   case t: Term => t.print(false)
+  //   case d: NuDecl => d.showDbg
+  //   case c: Constructor => c.showDbg
+  //   case e => lastWords(s"Unexpected typing unit entity: $e")
+  // }.mkString("{", "; ", "}")
 
   lazy val children: List[Located] = entities
 }
