@@ -730,9 +730,9 @@ trait TermImpl extends StatementImpl { self: Term =>
 private class NotAType(val trm: Statement) extends Throwable
 
 object PlainTup {
-  def apply(fields: Term*): Term =
+  def apply(fields: Term*): Tup =
     Tup(fields.iterator.map(t => (N, Fld(FldFlags.empty, t))).toList)
-  def unapplySeq(trm: Term): Opt[List[Term]] = trm match {
+  def unapplySeq(trm: Tup): Opt[List[Term]] = trm match {
     case Tup(fields) if fields.forall(f =>
       f._1.isEmpty && f._2.flags.mut === false && f._2.flags.spec === false
     ) => S(fields.map(_._2.value))

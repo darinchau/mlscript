@@ -1,0 +1,50 @@
+:NewDefs
+
+
+// class __Builtin_Some() = ...
+// class __Builtin_None() = ...
+// fun __builtin_Some() = ...
+// fun __builtin_fold() = ...
+// fun __builtin_ifSome() = ...
+
+
+// TODO Should generate reference to __Builtin_Some
+Some
+//│ forall 'A. (value: 'A) -> Some['A]
+//│ Code generation encountered an error:
+//│   unresolved symbol Some
+
+// TODO add Some/None to pretyper
+// Should generate reference to __builtin_fold
+x => if x is
+  Some(v) then v
+  None then null
+//│ ╔══[ERROR] type identifier `Some` not found
+//│ ║  l.20: 	  Some(v) then v
+//│ ╙──      	  ^^^^
+//│ ╔══[ERROR] type identifier `None` not found
+//│ ║  l.21: 	  None then null
+//│ ╙──      	  ^^^^
+//│ forall 'a. (None | Some['a]) -> (null | 'a)
+//│ Code generation encountered an error:
+//│   unresolved symbol Some
+
+
+// TODO add Some/None to pretyper
+// For now, reject this:
+let f = x => if x is
+  Some(v) then v
+  else null
+//│ ╔══[ERROR] type identifier `Some` not found
+//│ ║  l.36: 	  Some(v) then v
+//│ ╙──      	  ^^^^
+//│ let f: forall 'a. (Object & ~#Some | Some['a]) -> (null | 'a)
+//│ Code generation encountered an error:
+//│   unresolved symbol Some
+
+
+// These two calls are undistinguishable:
+// f(1)  // returns 1 at runtime; but is typed as `null`
+// f(__builtin_Some(1))  // ALSO returns 1 at runtime
+
+
