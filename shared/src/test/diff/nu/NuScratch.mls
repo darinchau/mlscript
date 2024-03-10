@@ -1,3 +1,442 @@
 :NewDefs
 
+// class Some[A](value: A)
+module None
+//│ module None
+
+fun unsafe_cast(x) = x
+declare fun unsafe_cast: anything -> nothing
+//│ fun unsafe_cast: forall 'a. 'a -> 'a
+//│ fun unsafe_cast: anything -> nothing
+
+class BS(depth: Int)
+//│ class BS(depth: Int)
+
+module BN
+//│ module BN
+
+// fun _some(x) = if x is
+//   BS(n) then BS(n + 1)
+//   BN then BS(1)
+//   _ then x
+
+// Make anything an object to do away with object bound
+fun obj_cast[A](x: A) = unsafe_cast(x): Object & A
+//│ fun obj_cast: forall 'A. (x: 'A) -> (Object & 'A)
+
+fun none = unsafe_cast(BN): None
+//│ fun none: None
+
+type Option[A] = None | Some[A]
+//│ type Option[A] = None | Some[A]
+
+// fun some: 'a -> Some['a]
+fun some[A](x: A) = if obj_cast(x) is
+  BN then unsafe_cast(BS(1)): Some[A]
+  BS(n) then unsafe_cast(BS(n + 1)): Some[A]
+  _ then unsafe_cast(x): Some[A]
+//│ fun some: forall 'A. (x: 'A) -> Some['A]
+
+// fun unapply_some: Some['a] -> Option['a]
+// fun unapply_some[A](x: Some[A]) = if x is
+//   BS(1) then none
+//   BS(n) then some(unsafe_cast(BS(n - 1)): A): Some[A]
+//   _ then some(unsafe_cast(x): A): Some[A]
+
+// fun fold: (Option['a], 'a -> 'b, () -> 'b) -> 'b
+fun fold[A, B](opt: Option[A], k: A => B, ifEmpty: B) = if obj_cast(opt) is
+  BN then ifEmpty
+  BS(1) then k(unsafe_cast(BN): A)
+  BS(n) then k(unsafe_cast(BS(n - 1)): A)
+  _ then k(unsafe_cast(opt): A)
+//│ fun fold: forall 'A 'B. (opt: Option['A], k: 'A -> 'B, ifEmpty: 'B) -> 'B
+
+// TODO: Fix code generation (?)
+None
+//│ None
+//│ res
+//│     = None { class: [class None] }
+
+
+// TODO make the pattern matching work (?)
+
+// The given signatures for fold and stuff
+// let fold_ = fold : forall 'a, 'b: (Option['a], 'a -> 'b, 'b) -> 'b
+// let some_ = some : forall 'a: (Object & 'a) -> Opt['a]
+// ========================================================================================= //
+let fold_ = fold
+let some_ = some
+type Opt[A] = Option[A]
+// ========================================================================================= //
+//│ let fold_: forall 'A 'B. (opt: Option['A], k: 'A -> 'B, ifEmpty: 'B) -> 'B
+//│ let some_: forall 'A0. (x: 'A0) -> Some['A0]
+//│ type Opt[A] = Option[A]
+//│ fold_
+//│       = [Function: fold]
+//│ some_
+//│       = [Function: some]
+
+let s = some_(42)
+//│ let s: Some[42]
+//│ s
+//│   = 42
+
+s : Opt[Int]
+//│ Opt[Int]
+//│ res
+//│     = 42
+
+fold_(s, id, 0)
+//│ 0 | 42
+//│ res
+//│     = 42
+
+:e // * This wont work when `Opt` is made opaque to the outside: (Should this fail now then...?)
+s : Opt[Opt[Int]]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.95: 	s : Opt[Opt[Int]]
+//│ ║        	^
+//│ ╟── integer literal of type `42` does not match type `None | Some[Int]`
+//│ ║  l.79: 	let s = some_(42)
+//│ ║        	              ^^
+//│ ╟── Note: constraint arises from union type:
+//│ ║  l.30: 	type Option[A] = None | Some[A]
+//│ ║        	                 ^^^^^^^^^^^^^^
+//│ ╟── from applied type reference:
+//│ ║  l.95: 	s : Opt[Opt[Int]]
+//│ ╙──      	        ^^^^^^^^
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+let ss = some_(some_(42))
+//│ let ss: Some[Some[42]]
+//│ ss
+//│    = 42
+
+:e
+ss : Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.118: 	ss : Opt[Int]
+//│ ║         	^^
+//│ ╟── type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.37: 	  _ then unsafe_cast(x): Some[A]
+//│ ╙──      	                         ^^^^^^^
+//│ Opt[Int]
+//│ res
+//│     = 42
+
+ss : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+fold_(ss, o => fold_(o, id, -1), 0)
+//│ -1 | 0 | 42
+//│ res
+//│     = 42
+
+
+let s = some_(None)
+//│ let s: Some[None]
+//│ s
+//│   = None { class: [class None] }
+
+:e
+s : Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.146: 	s : Opt[Int]
+//│ ║         	^
+//│ ╟── reference of type `None` is not an instance of type `Int`
+//│ ║  l.140: 	let s = some_(None)
+//│ ╙──       	              ^^^^
+//│ Opt[Int]
+//│ res
+//│     = None { class: [class None] }
+
+s : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = None { class: [class None] }
+
+fold_(s, o => fold_(o, id, -1), 0)
+//│ -1 | 0
+//│ res
+//│     = None { class: [class None] }
+
+some_(some_(None))
+//│ Some[Some[None]]
+//│ res
+//│     = None { class: [class None] }
+
+ss
+//│ Some[Some[42]]
+//│ res
+//│     = 42
+
+:e
+ss: Int
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.178: 	ss: Int
+//│ ║         	^^
+//│ ╟── type `Some[?A]` is not an instance of `Int`
+//│ ║  l.37: 	  _ then unsafe_cast(x): Some[A]
+//│ ║        	                         ^^^^^^^
+//│ ╟── but it flows into reference with expected type `Int`
+//│ ║  l.178: 	ss: Int
+//│ ║         	^^
+//│ ╟── Note: constraint arises from type reference:
+//│ ║  l.178: 	ss: Int
+//│ ╙──       	    ^^^
+//│ Int
+//│ res
+//│     = 42
+
+ss: Some[Opt[Int]]
+ss: Opt[Some[Int]]
+ss: Some[Some[Int]]
+ss: Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+//│ res
+//│     = 42
+//│ res
+//│     = 42
+//│ res
+//│     = 42
+
+:e
+ss: Opt[Opt[Opt[Int]]]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.210: 	ss: Opt[Opt[Opt[Int]]]
+//│ ║         	^^
+//│ ╟── integer literal of type `42` does not match type `None | Some[Int]`
+//│ ║  l.112: 	let ss = some_(some_(42))
+//│ ║         	                     ^^
+//│ ╟── Note: constraint arises from union type:
+//│ ║  l.30: 	type Option[A] = None | Some[A]
+//│ ║        	                 ^^^^^^^^^^^^^^
+//│ ╟── from applied type reference:
+//│ ║  l.210: 	ss: Opt[Opt[Opt[Int]]]
+//│ ╙──       	            ^^^^^^^^
+//│ Opt[Opt[Opt[Int]]]
+//│ res
+//│     = 42
+
+:e
+ss: Some[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.228: 	ss: Some[Int]
+//│ ║         	^^
+//│ ╟── type `Some[?A]` is not an instance of `Int`
+//│ ║  l.37: 	  _ then unsafe_cast(x): Some[A]
+//│ ║        	                         ^^^^^^^
+//│ ╟── Note: constraint arises from type reference:
+//│ ║  l.228: 	ss: Some[Int]
+//│ ╙──       	         ^^^
+//│ Some[Int]
+//│ res
+//│     = 42
+
+// TODO: Investigate :e problem (?)
+let ss = some_(some_(42))
+//│ let ss: Some[Some[42]]
+//│ ss
+//│    = 42
+
+// :e
+// ss: Opt[Int]
+
+:e
+let hi : Opt[Int] = some_(some_(42)) 
+// fold(hi, id, 0)
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.252: 	let hi : Opt[Int] = some_(some_(42)) 
+//│ ║         	                    ^^^^^^^^^^^^^^^^
+//│ ╟── type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.37: 	  _ then unsafe_cast(x): Some[A]
+//│ ║        	                         ^^^^^^^
+//│ ╟── but it flows into application with expected type `Int`
+//│ ║  l.252: 	let hi : Opt[Int] = some_(some_(42)) 
+//│ ╙──       	                          ^^^^^^^^^
+//│ let hi: Opt[Int]
+//│ hi
+//│    = 42
+
+ss
+//│ Some[Some[42]]
+//│ res
+//│     = 42
+
+ss : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+fold_(ss, o => fold_(o, id, -1), 0)
+//│ -1 | 0 | 42
+//│ res
+//│     = 42
+
+
+
+// * Here we use the precise, unannotated types directly to showcase precise inferred types.
+
+let s = some(42)
+//│ let s: Some[42]
+//│ s
+//│   = 42
+
+s : Opt[Int]
+//│ Opt[Int]
+//│ res
+//│     = 42
+
+fold(s, id, 0)
+//│ 0 | 42
+//│ res
+//│     = 42
+
+:e // Why should this pass?
+s : Opt[Opt[Int]]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.302: 	s : Opt[Opt[Int]]
+//│ ║         	^
+//│ ╟── integer literal of type `42` does not match type `None | Some[Int]`
+//│ ║  l.286: 	let s = some(42)
+//│ ║         	             ^^
+//│ ╟── Note: constraint arises from union type:
+//│ ║  l.30: 	type Option[A] = None | Some[A]
+//│ ║        	                 ^^^^^^^^^^^^^^
+//│ ╟── from applied type reference:
+//│ ║  l.302: 	s : Opt[Opt[Int]]
+//│ ╙──       	        ^^^^^^^^
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+let ss = some(some(42))
+//│ let ss: Some[Some[42]]
+//│ ss
+//│    = 42
+
+:e
+ss : Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.325: 	ss : Opt[Int]
+//│ ║         	^^
+//│ ╟── type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.37: 	  _ then unsafe_cast(x): Some[A]
+//│ ╙──      	                         ^^^^^^^
+//│ Opt[Int]
+//│ res
+//│     = 42
+
+ss : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+fold(ss, o => fold(o, id, -1), 0)
+//│ -1 | 0 | 42
+//│ res
+//│     = 42
+
+
+let s = some(None)
+//│ let s: Some[None]
+//│ s
+//│   = None { class: [class None] }
+
+:e
+s : Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.353: 	s : Opt[Int]
+//│ ║         	^
+//│ ╟── reference of type `None` is not an instance of type `Int`
+//│ ║  l.347: 	let s = some(None)
+//│ ╙──       	             ^^^^
+//│ Opt[Int]
+//│ res
+//│     = None { class: [class None] }
+
+s : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = None { class: [class None] }
+
+fold(s, o => fold(o, id, -1), 0)
+//│ -1 | 0
+//│ res
+//│     = None { class: [class None] }
+
+some(some(None))
+//│ Some[Some[None]]
+//│ res
+//│     = None { class: [class None] }
+
+:e
+let ss = some(some(42))
+ss: Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.381: 	ss: Opt[Int]
+//│ ║         	^^
+//│ ╟── type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.37: 	  _ then unsafe_cast(x): Some[A]
+//│ ╙──      	                         ^^^^^^^
+//│ let ss: Some[Some[42]]
+//│ Opt[Int]
+//│ ss
+//│    = 42
+//│ res
+//│     = 42
+
+ss : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+fold(ss, o => fold(o, id, -1), 0)
+//│ -1 | 0 | 42
+//│ res
+//│     = 42
+
+
+// * Demonstration that we can't lift a parametric value into an unboxed option without casts.
+
+fun mk(x: Object) = some(x)
+//│ fun mk: (x: Object) -> Some[Object]
+
+//:e // Huh do we actually want the objec tbound?
+fun mk[A](x: A) = some(x)
+//│ fun mk: forall 'A. (x: 'A) -> Some['A]
+
+fun mk[A](x: A & Object) = some(x)
+//│ fun mk: forall 'A. (x: Object & 'A) -> Some[Object & 'A]
+
+:e
+let s = 42
+s: Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.420: 	s: Opt[Int]
+//│ ║         	^
+//│ ╟── integer literal of type `42` does not match type `None | Some[Int]`
+//│ ║  l.419: 	let s = 42
+//│ ║         	        ^^
+//│ ╟── but it flows into reference with expected type `None | Some[Int]`
+//│ ║  l.420: 	s: Opt[Int]
+//│ ║         	^
+//│ ╟── Note: constraint arises from union type:
+//│ ║  l.30: 	type Option[A] = None | Some[A]
+//│ ║        	                 ^^^^^^^^^^^^^^
+//│ ╟── from applied type reference:
+//│ ║  l.420: 	s: Opt[Int]
+//│ ╙──       	   ^^^^^^^^
+//│ let s: 42
+//│ Opt[Int]
+//│ s
+//│   = 42
+//│ res
+//│     = 42
 

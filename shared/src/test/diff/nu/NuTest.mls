@@ -1,0 +1,82 @@
+:NewDefs
+
+// class Some[A](value: A)
+module None
+//│ module None
+
+fun unsafe_cast(x) = x
+declare fun unsafe_cast: anything -> nothing
+//│ fun unsafe_cast: forall 'a. 'a -> 'a
+//│ fun unsafe_cast: anything -> nothing
+
+class BS(depth: Int)
+module BN
+//│ class BS(depth: Int)
+//│ module BN
+
+// Make anything an object to do away with object bound
+fun obj_cast[A](x: A) = unsafe_cast(x): Object & A
+fun none = unsafe_cast(BN): None
+// fun some: 'a -> Some['a]
+fun some[A](x: A) = if obj_cast(x) is
+  BN then unsafe_cast(BS(1)): Some[A]
+  BS(n) then unsafe_cast(BS(n + 1)): Some[A]
+  _ then unsafe_cast(x): Some[A]
+//│ fun obj_cast: forall 'A. (x: 'A) -> (Object & 'A)
+//│ fun none: None
+//│ fun some: forall 'A0. (x: 'A0) -> Some['A0]
+
+type Option[A] = None | Some[A]
+//│ type Option[A] = None | Some[A]
+
+// fun fold: (Option['a], 'a -> 'b, () -> 'b) -> 'b
+fun fold[A, B](opt: Option[A], k: A => B, ifEmpty: B) = if obj_cast(opt) is
+  BN then ifEmpty
+  BS(1) then k(unsafe_cast(BN): A)
+  BS(n) then k(unsafe_cast(BS(n - 1)): A)
+  _ then k(unsafe_cast(opt): A)
+//│ fun fold: forall 'A 'B. (opt: Option['A], k: 'A -> 'B, ifEmpty: 'B) -> 'B
+
+None
+//│ None
+//│ res
+//│     = None { class: [class None] }
+
+// The given signatures for fold and stuff
+// let fold_ = fold : forall 'a, 'b: (Option['a], 'a -> 'b, 'b) -> 'b
+// let some_ = some : forall 'a: (Object & 'a) -> Opt['a]
+// ========================================================================================= //
+let fold_ = fold
+let some_ = some
+type Opt[A] = Option[A]
+// ========================================================================================= //
+//│ let fold_: forall 'A 'B. (opt: Option['A], k: 'A -> 'B, ifEmpty: 'B) -> 'B
+//│ let some_: forall 'A0. (x: 'A0) -> Some['A0]
+//│ type Opt[A] = Option[A]
+//│ fold_
+//│       = [Function: fold]
+//│ some_
+//│       = [Function: some]
+
+let ss = some_(some_(42))
+//│ let ss: Some[Some[42]]
+//│ ss
+//│    = 42
+
+:e
+ss : Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.67: 	ss : Opt[Int]
+//│ ║        	^^
+//│ ╟── type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.24: 	  _ then unsafe_cast(x): Some[A]
+//│ ╙──      	                         ^^^^^^^
+//│ Opt[Int]
+//│ res
+//│     = 42
+
+// WEIRD D:
+ss: Opt[Int]
+//│ Opt[Int]
+//│ res
+//│     = 42
