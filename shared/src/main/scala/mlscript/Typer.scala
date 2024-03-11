@@ -244,7 +244,7 @@ class Typer(var dbg: Boolean, var verbose: Bool, var explainErrors: Bool, val ne
       S(Tup( (S(Var("value")), Fld(FldFlags.empty, Var("A"))) :: Nil )),
       N, N, Nil, N, N,
       TypingUnit(Nil))(N, N),
-    // NuTypeDef(Mod, TN("None"), Nil, N, N, N, Nil, N, N, TypingUnit(Nil))(N, N),
+    NuTypeDef(Mod, TN("None"), Nil, N, N, N, Nil, N, N, TypingUnit(Nil))(N, N),
     // 
   )
   val builtinTypes: Ls[TypeDef] =

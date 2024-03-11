@@ -195,7 +195,14 @@ abstract class JSBackend(allowUnresolvedSymbols: Bool) {
       val lamScope = scope.derive("Lam")
       val patterns = translateParams(params)(lamScope)
       JSArrowFn(patterns, lamScope.tempVars `with` translateTerm(body)(lamScope))
-    case t: App => translateApp(t)
+    // Overrides for unboxed options 
+    case App(Var("Some"), trm) =>
+      translateApp(App(Var("__builtin_some"), trm))
+    case App(Sel(Var("Some"), Var("unapply")), trm) =>
+      translateApp(App(Var("__builtin_some_unapply"), trm))
+    // End override for unboxed options
+    case t: App =>
+      translateApp(t)
     case Rcd(fields) =>
       JSRecord(fields map { case (key, Fld(_, value)) =>
         key.name -> translateTerm(value)
@@ -204,6 +211,7 @@ abstract class JSBackend(allowUnresolvedSymbols: Bool) {
       JSField(translateTerm(receiver), fieldName.name)
     // Turn let into an IIFE.
     case Let(true, Var(name), Lam(args, body), expr) =>
+      lastWords(s"Reached Let ${name} \n\n${args} \n\n${body}")
       val letScope = scope.derive("Let")
       val runtimeName = letScope.declareParameter(name)
       val fn = {
@@ -221,6 +229,7 @@ abstract class JSBackend(allowUnresolvedSymbols: Bool) {
     case Let(true, Var(name), _, _) =>
       throw new CodeGenError(s"recursive non-function definition $name is not supported")
     case Let(_, Var(name), value, body) =>
+      // lastWords(s"Reached Let 2 ${name} \n\n${value} \n\n${body}")
       val letScope = scope.derive("Let")
       val runtimeName = letScope.declareParameter(name)
       JSImmEvalFn(
@@ -230,6 +239,7 @@ abstract class JSBackend(allowUnresolvedSymbols: Bool) {
         translateTerm(value) :: Nil
       )
     case Blk(stmts) =>
+      lastWords("DO we reach here?")
       val blkScope = scope.derive("Blk")
       val flattened = stmts.iterator.flatMap {
         case nt: NuTypeDef => nt :: Nil
@@ -260,10 +270,18 @@ abstract class JSBackend(allowUnresolvedSymbols: Bool) {
     // Pattern match with only one branch -> comma expression
     case CaseOf(trm, Wildcard(default)) =>
       JSCommaExpr(translateTerm(trm) :: translateTerm(default) :: Nil)
-    // Pattern match with two branches -> tenary operator
+      // Pattern match with two branches -> tenary operator
+    case CaseOf(trm, cs @ Case(Var("Some"), csq, Wildcard(alt))) =>
+      // Report an error for Some -> Wildcard for now
+      TODO("case else for Options not implemented D:")
     case CaseOf(trm, cs @ Case(tst, csq, Wildcard(alt))) =>
       translateCase(translateTerm(trm), tst)(scope)(translateTerm(csq), translateTerm(alt))
-    // Pattern match with more branches -> chain of ternary expressions with cache
+    // Pattern match with more branches -> chain of ternary expressions with 
+    case CaseOf(trm, cs @ Case(Var("Some"), csq, other)) =>
+      // lastWords(s"Some case term not implemented D:\n\n ${trm} \n\n ${csq} \n\n ${other}")
+      // Code gen for the Some case is slightly complicated
+      // We can generate two branches??????
+      translateTerm(CaseOf(trm, Case(Var("Builtin_Some__"), csq, other)(cs.refined)))
     case CaseOf(trm, cases) =>
       val arg = translateTerm(trm)
       if (arg.isSimple) {
