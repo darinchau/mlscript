@@ -2,40 +2,45 @@
 
 // This is used internally to process stuff
 declare module None
-class Builtin_Some__(depth: Int) {
-  fun x = if depth == 1 then None else Builtin_Some__(depth - 1)
-}
-module Builtin_None__
-type Builtin_Opts__[A] = Builtin_None__ | Builtin_Some__ | A & Object & ~Builtin_None__ & ~Builtin_Some__
+class Builtin_Some__(depth: Int)
 fun __builtin_some(x) = if x is
-  Builtin_None__ then Builtin_Some__(1)
   None then Builtin_Some__(1)
   Builtin_Some__(d) then Builtin_Some__(d + 1)
   _ then x
-fun __builtin_some_unapply(x) = if x is
-  Builtin_Some__ then x.x
-  _ then x
 //│ declare module None
-//│ class Builtin_Some__(depth: Int) {
-//│   fun x: Builtin_Some__ | None
-//│ }
-//│ module Builtin_None__
-//│ type Builtin_Opts__[A] = Builtin_None__ | Builtin_Some__ | Object & A & ~Builtin_None__ & ~Builtin_Some__
-//│ fun __builtin_some: forall 'a. (Builtin_None__ | Builtin_Some__ | None | Object & 'a & ~#Builtin_None__ & ~#Builtin_Some__ & ~#None) -> (Builtin_Some__ | 'a)
+//│ class Builtin_Some__(depth: Int)
+//│ fun __builtin_some: forall 'a. (Builtin_Some__ | None | Object & 'a & ~#Builtin_Some__ & ~#None) -> (Builtin_Some__ | 'a)
+fun __builtin_some_unapply(x) = if x is
+  Builtin_Some__(1) then None
+  Builtin_Some__(d) then Builtin_Some__(d-1)
+  _ then x // This should not run on None but we will make the check elsewhere
+declare fun __builtin_some_unapply: Some['a] -> 'a
 //│ fun __builtin_some_unapply: forall 'b. (Builtin_Some__ | Object & 'b & ~#Builtin_Some__) -> (Builtin_Some__ | None | 'b)
+//│ fun __builtin_some_unapply: forall 'a. Some['a] -> 'a
+
+//Debug purposes only
+fun unsafe_cast(x) = x
+declare fun unsafe_cast: anything -> nothing
+fun peek_depth(x) =
+  let y: Builtin_Some__ = unsafe_cast(x)
+  if y is Builtin_Some__(d) then d
+fun assert_same(x, y) = 
+  let z = if unsafe_cast(x) == y then 1 else 0
+  if (unsafe_cast(z): 1) is 1 then true
+//│ fun unsafe_cast: forall 'a. 'a -> 'a
+//│ fun peek_depth: anything -> Int
+//│ fun assert_same: (anything, Num) -> true
+//│ fun unsafe_cast: anything -> nothing
 
 
 // This is exposed to the user
-module None
-class Some[out A](val x: A) {
-  fun unapply(self) = __builtin_some_unapply(self)
-}
-type Option[out A] = Some[A] | None
-//│ module None
-//│ class Some[A](x: A) {
-//│   fun unapply: forall 'a. (Builtin_Some__ | Object & 'a & ~#Builtin_Some__) -> (Builtin_Some__ | None | 'a)
-//│ }
-//│ type Option[A] = None | Some[A]
+abstract class Option[out A]
+class Some[out A](val value: A) extends Option[A]
+module None extends Option[nothing]
+// type Option[out A] = Some[A] | None
+//│ abstract class Option[A]
+//│ class Some[A](value: A) extends Option
+//│ module None extends Option
 
 
 // ============================== Apply ==========================
@@ -43,8 +48,8 @@ type Option[out A] = Some[A] | None
 let x = Some(1) 
 //│ let x: Some[1]
 //│ // Prelude
-//│ class TypingUnit2 {}
-//│ const typing_unit2 = new TypingUnit2;
+//│ class TypingUnit4 {}
+//│ const typing_unit4 = new TypingUnit4;
 //│ // Query 1
 //│ globalThis.x = __builtin_some(1);
 //│ // End of generated code
@@ -55,37 +60,32 @@ let x = Some(1)
 let y = None 
 //│ let y: None
 //│ // Prelude
-//│ class TypingUnit3 {}
-//│ const typing_unit3 = new TypingUnit3;
+//│ class TypingUnit5 {}
+//│ const typing_unit5 = new TypingUnit5;
 //│ // Query 1
 //│ globalThis.y = None;
 //│ // End of generated code
 //│ y
-//│   = None { class: [class None] }
+//│   = None { class: [class None extends Option] }
 
 :js
 let z = Some(None)
 //│ let z: Some[None]
 //│ // Prelude
-//│ class TypingUnit4 {}
-//│ const typing_unit4 = new TypingUnit4;
+//│ class TypingUnit6 {}
+//│ const typing_unit6 = new TypingUnit6;
 //│ // Query 1
 //│ globalThis.z = __builtin_some(None);
 //│ // End of generated code
 //│ z
 //│   = Builtin_Some__ {}
 
-z.x
-//│ None
-//│ res
-//│     = undefined
-
 :js
 let a = Some(Some(1))
 //│ let a: Some[Some[1]]
 //│ // Prelude
-//│ class TypingUnit6 {}
-//│ const typing_unit6 = new TypingUnit6;
+//│ class TypingUnit7 {}
+//│ const typing_unit7 = new TypingUnit7;
 //│ // Query 1
 //│ globalThis.a = __builtin_some(__builtin_some(1));
 //│ // End of generated code
@@ -102,13 +102,10 @@ s1: Option[Option[Int]]
 //│ ╔══[ERROR] Type mismatch in type ascription:
 //│ ║  l.101: 	s1: Option[Option[Int]]
 //│ ║         	^^
-//│ ╟── integer literal of type `1` does not match type `None | Some[Int]`
+//│ ╟── integer literal of type `1` is not an instance of type `Option`
 //│ ║  l.95: 	let s1 = Some(1)
 //│ ║        	              ^
-//│ ╟── Note: constraint arises from union type:
-//│ ║  l.33: 	type Option[out A] = Some[A] | None
-//│ ║        	                     ^^^^^^^^^^^^^^
-//│ ╟── from applied type reference:
+//│ ╟── Note: constraint arises from applied type reference:
 //│ ║  l.101: 	s1: Option[Option[Int]]
 //│ ╙──       	           ^^^^^^^^^^^
 //│ Option[Option[Int]]
@@ -123,10 +120,10 @@ let ss1 = Some(Some(1))
 :e
 ss1: Option[Int]
 //│ ╔══[ERROR] Type mismatch in type ascription:
-//│ ║  l.124: 	ss1: Option[Int]
+//│ ║  l.121: 	ss1: Option[Int]
 //│ ║         	^^^
 //│ ╟── application of type `Some[?A]` is not an instance of type `Int`
-//│ ║  l.118: 	let ss1 = Some(Some(1))
+//│ ║  l.115: 	let ss1 = Some(Some(1))
 //│ ╙──       	               ^^^^^^^
 //│ Option[Int]
 //│ res
@@ -145,10 +142,10 @@ sn: Option[None]
 :e
 sn: Option[Int]
 //│ ╔══[ERROR] Type mismatch in type ascription:
-//│ ║  l.146: 	sn: Option[Int]
+//│ ║  l.143: 	sn: Option[Int]
 //│ ║         	^^
 //│ ╟── reference of type `None` is not an instance of type `Int`
-//│ ║  l.135: 	let sn = Some(None)
+//│ ║  l.132: 	let sn = Some(None)
 //│ ╙──       	              ^^^^
 //│ Option[Int]
 //│ res
@@ -159,27 +156,329 @@ sn: Option[Option[Int]]
 //│ res
 //│     = Builtin_Some__ {}
 
-// ============================== Pattern matching ==========================
 
-let s5 = Some(5)
-//│ let s5: Some[5]
-//│ s5
-//│    = 5
-
-// ============================== Old unboxed option tests ==========================
-
-fun some(x) = Some(x)
-let some_ = some: forall 'a: 'a -> Option['a]
-//│ fun some: forall 'A. 'A -> Some['A]
-//│ let some_: forall 'a. 'a -> Option['a]
-//│ some_
-//│       = [Function: some]
+// ======================================== fold ====================================
 
 fun fold(opt, k, d) = if opt is
   refined(None) then d
-  refined(Some) then k(opt.x)
-  else k(opt)
-//│ fun fold: forall 'x 'a. (None | Object & 'x & ~#None & ~#Some | Some[anything] & {x: 'x}, 'x -> 'a, 'a) -> 'a
+  refined(Some) then k(__builtin_some_unapply(opt))
+  _ then k(opt)
+declare fun fold: (Option['x], 'x -> 'a, 'a) -> 'a
+//│ fun fold: forall 'b 'c. (None | Object & 'b & ~#None & ~#Some | Some['b], 'b -> 'c, 'c) -> 'c
+//│ fun fold: forall 'x 'a. (Option['x], 'x -> 'a, 'a) -> 'a
 
-// ===================================================================================
+let s42 = Some(42)
+fold(s42, id, 0)
+//│ let s42: Some[42]
+//│ 0 | 42
+//│ s42
+//│     = 42
+//│ res
+//│     = 42
 
+let ss1 = Some(Some(1))
+fold(ss1, o => fold(o, id, -1), 0)
+//│ let ss1: Some[Some[1]]
+//│ -1 | 0 | 1
+//│ ss1
+//│     = 1
+//│ res
+//│     = 1
+
+:e
+let s42 = Some(42)
+fold(s42, o => fold(o, id, -1), 0)
+//│ ╔══[ERROR] Type mismatch in application:
+//│ ║  l.190: 	fold(s42, o => fold(o, id, -1), 0)
+//│ ║         	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//│ ╟── integer literal of type `42` is not an instance of type `Option`
+//│ ║  l.189: 	let s42 = Some(42)
+//│ ║         	               ^^
+//│ ╟── Note: constraint arises from applied type reference:
+//│ ║  l.166: 	declare fun fold: (Option['x], 'x -> 'a, 'a) -> 'a
+//│ ║         	                   ^^^^^^^^^^
+//│ ╟── from reference:
+//│ ║  l.190: 	fold(s42, o => fold(o, id, -1), 0)
+//│ ╙──       	                    ^
+//│ let s42: Some[42]
+//│ -1 | 0 | error
+//│ s42
+//│     = 42
+//│ res
+//│     = 42
+
+let ss42 = Some(Some(42))
+fold(ss42, o => fold(o, id, -1), 0)
+//│ let ss42: Some[Some[42]]
+//│ -1 | 0 | 42
+//│ ss42
+//│      = 42
+//│ res
+//│     = 42
+
+let sn: Option[Option[Int]] = Some(None)
+fold(sn, o => fold(o, id, -1), 0)
+//│ let sn: Option[Option[Int]]
+//│ Int
+//│ sn
+//│    = Builtin_Some__ {}
+//│ res
+//│     = -1
+
+let ssn = Some(Some(None))
+//│ let ssn: Some[Some[None]]
+//│ ssn
+//│     = Builtin_Some__ {}
+
+:e
+ssn : Option[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.234: 	ssn : Option[Int]
+//│ ║         	^^^
+//│ ╟── application of type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.228: 	let ssn = Some(Some(None))
+//│ ╙──       	               ^^^^^^^^^^
+//│ Option[Int]
+//│ res
+//│     = Builtin_Some__ {}
+
+:e
+ssn : Option[Option[Int]]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.246: 	ssn : Option[Option[Int]]
+//│ ║         	^^^
+//│ ╟── reference of type `None` is not an instance of type `Int`
+//│ ║  l.228: 	let ssn = Some(Some(None))
+//│ ╙──       	                    ^^^^
+//│ Option[Option[Int]]
+//│ res
+//│     = Builtin_Some__ {}
+
+let folded_ssn = fold(ssn, id, 0)
+//│ let folded_ssn: 0 | Some[None]
+//│ folded_ssn
+//│            = Builtin_Some__ {}
+
+let foldeded_ssn = fold(ssn, o => fold(o, id, -1), 0)
+//│ let foldeded_ssn: -1 | 0 | None
+//│ foldeded_ssn
+//│              = None { class: [class None extends Option] }
+
+if (unsafe_cast(peek_depth(folded_ssn)): 1) is 1 then 1 // assert peek_depth(folded_ssn) == 1
+//│ 1
+//│ res
+//│     = 1
+
+:re
+peek_depth(foldeded_ssn) // Fails because foldeded_ssn is None
+//│ Int
+//│ res
+//│ Runtime error:
+//│   Error: non-exhaustive case expression
+
+
+// ============================== Pattern matching ==========================
+
+:p
+:js
+//TODO
+fun unbox(opt) = if opt is
+  Some(5) then 42069
+  None then 0
+  Some(x) then x
+  else 1
+//│ |#fun| |unbox|(|opt|)| |#=| |#if| |opt| |is|→|Some|(|5|)| |#then| |42069|↵|None| |#then| |0|↵|Some|(|x|)| |#then| |x|↵|#else| |1|←|
+//│ AST: TypingUnit(List(NuFunDef(None,Var(unbox),None,List(),Left(Lam(Tup(List((None,Fld(_,Var(opt))))),If(IfOpApp(Var(opt),Var(is),IfBlock(List(Left(IfThen(App(Var(Some),Tup(List((None,Fld(_,IntLit(5)))))),IntLit(42069))), Left(IfThen(Var(None),IntLit(0))), Left(IfThen(App(Var(Some),Tup(List((None,Fld(_,Var(x)))))),Var(x))), Left(IfElse(IntLit(1)))))),None))))))
+//│ Parsed: fun unbox = (opt,) => if opt is ‹(Some(5,)) then 42069; (None) then 0; (Some(x,)) then x; else 1›;
+//│ fun unbox: forall 'a. (Object & ~#Some | Some[Object & 'a]) -> (0 | 1 | 42069 | 'a)
+//│ // Prelude
+//│ class TypingUnit29 {}
+//│ const typing_unit29 = new TypingUnit29;
+//│ // Query 1
+//│ globalThis.unbox = function unbox(opt) {
+//│   let b;
+//│   return b = opt, b instanceof Builtin_Some__.class ? ((ucs$args_opt$Some) => ((opt$Some_0) => opt$Some_0 === 5 ? 42069 : ((x) => x)(ucs$args_opt$Some[0]))(ucs$args_opt$Some[0]))(Some.unapply(opt)) : b instanceof None.class ? 0 : 1;
+//│ };
+//│ // End of generated code
+
+// ============================== Old unboxed option tests ==========================
+
+type Opt[A] = Option[A]
+let some_ = x => Some(x)
+let fold_ = fold
+//│ type Opt[A] = Option[A]
+//│ let some_: forall 'A. 'A -> Some['A]
+//│ let fold_: forall 'x 'a. (Option['x], 'x -> 'a, 'a) -> 'a
+//│ some_
+//│       = [Function: some_]
+//│ fold_
+//│       = [Function: fold]
+
+let s = some_(42)
+//│ let s: Some[42]
+//│ s
+//│   = 42
+
+s : Opt[Int]
+//│ Opt[Int]
+//│ res
+//│     = 42
+
+fold_(s, id, 0)
+//│ 0 | 42
+//│ res
+//│     = 42
+
+:e
+// * This wont work when `Opt` is made opaque to the outside:
+s : Opt[Opt[Int]]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.334: 	s : Opt[Opt[Int]]
+//│ ║         	^
+//│ ╟── integer literal of type `42` is not an instance of type `Option`
+//│ ║  l.317: 	let s = some_(42)
+//│ ║         	              ^^
+//│ ╟── Note: constraint arises from applied type reference:
+//│ ║  l.306: 	type Opt[A] = Option[A]
+//│ ║         	              ^^^^^^^^^
+//│ ╟── from applied type reference:
+//│ ║  l.334: 	s : Opt[Opt[Int]]
+//│ ╙──       	        ^^^^^^^^
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+let ss = some_(some_(42))
+//│ let ss: Some[Some[42]]
+//│ ss
+//│    = 42
+
+:e
+ss : Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.357: 	ss : Opt[Int]
+//│ ║         	^^
+//│ ╟── application of type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.307: 	let some_ = x => Some(x)
+//│ ╙──       	                 ^^^^^^^
+//│ Opt[Int]
+//│ res
+//│     = 42
+
+ss : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+fold_(ss, o => fold_(o, id, -1), 0)
+//│ -1 | 0 | 42
+//│ res
+//│     = 42
+
+
+let s = some_(None)
+//│ let s: Some[None]
+//│ s
+//│   = Builtin_Some__ {}
+
+:e
+s : Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.385: 	s : Opt[Int]
+//│ ║         	^
+//│ ╟── reference of type `None` is not an instance of type `Int`
+//│ ║  l.379: 	let s = some_(None)
+//│ ╙──       	              ^^^^
+//│ Opt[Int]
+//│ res
+//│     = Builtin_Some__ {}
+
+s : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = Builtin_Some__ {}
+
+fold_(s, o => fold_(o, id, -1), 0)
+//│ -1 | 0
+//│ res
+//│     = -1
+
+some_(some_(None))
+//│ Some[Some[None]]
+//│ res
+//│     = Builtin_Some__ {}
+
+ss
+//│ Some[Some[42]]
+//│ res
+//│     = 42
+
+:e
+ss : Opt[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.417: 	ss : Opt[Int]
+//│ ║         	^^
+//│ ╟── application of type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.307: 	let some_ = x => Some(x)
+//│ ╙──       	                 ^^^^^^^
+//│ Opt[Int]
+//│ res
+//│     = 42
+
+ss : Opt[Opt[Int]]
+//│ Opt[Opt[Int]]
+//│ res
+//│     = 42
+
+:e
+ss == 42
+//│ ╔══[ERROR] Type mismatch in operator application:
+//│ ║  l.434: 	ss == 42
+//│ ║         	^^^^^^^^
+//│ ╟── application of type `Some[?A]` is not an instance of type `Num`
+//│ ║  l.307: 	let some_ = x => Some(x)
+//│ ║         	                 ^^^^^^^
+//│ ╟── but it flows into reference with expected type `Num`
+//│ ║  l.434: 	ss == 42
+//│ ╙──       	^^
+//│ error | false | true
+//│ res
+//│     = true
+
+unsafe_cast(ss) == 42
+//│ Bool
+//│ res
+//│     = true
+
+fold_(ss, o => fold_(o, id, -1), 0)
+//│ -1 | 0 | 42
+//│ res
+//│     = 42
+
+// ============================== Other standard fns ==========================
+fun map: (Option['x], 'x -> 'a) -> Option['a]
+fun map(opt, f) = fold(opt, x => Some(f(x)), None)
+//│ fun map: forall 'b 'c. (Option['b], 'b -> 'c) -> (None | Some['c])
+//│ fun map: forall 'x 'a. (Option['x], 'x -> 'a) -> Option['a]
+
+fun flatMap: (Option['x], 'x -> Option['a]) -> Option['a]
+fun flatMap(opt, f) = fold(opt, f, None)
+//│ fun flatMap: forall 'x 'b. (Option['x], 'x -> 'b) -> (None | 'b)
+//│ fun flatMap: forall 'x0 'a. (Option['x0], 'x0 -> Option['a]) -> Option['a]
+
+fun filter: (Option['x], 'x -> Bool) -> Option['x]
+fun filter(opt, f) = 
+  let f_ = x => if f(x) then Some(x) else None
+  fold(opt, f_, None)
+//│ fun filter: forall 'A. (Option['A], 'A -> Bool) -> (None | Some['A])
+//│ fun filter: forall 'x. (Option['x], 'x -> Bool) -> Option['x]
+
+fun getOrElse: (Option['x], 'x) -> 'x
+fun getOrElse(opt, d) = fold(opt, id, d)
+//│ fun getOrElse: forall 'a. (Option['a], 'a) -> 'a
+//│ fun getOrElse: forall 'x. (Option['x], 'x) -> 'x
+
+fun isDefined: Option['x] -> Bool
+fun isDefined(opt) = fold(opt, x => true, false)
+//│ fun isDefined: Option[anything] -> Bool
+//│ fun isDefined: Option[anything] -> Bool

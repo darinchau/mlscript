@@ -22,7 +22,7 @@ fun some(x) = if x is
   refined(None) then Some(x)
   refined(Some) then Some(x)
   else x
-//│ fun some: forall 'a 'b 'c. (None & 'b | Object & 'c & ~#None & ~#Some | Some[anything] & 'a) -> (Some[None & 'b | Some[anything] & 'a] | 'c)
+//│ fun some: forall 'a 'b 'c. (None & 'a | Object & 'b & ~#None & ~#Some | Some[anything] & 'c) -> (Some[None & 'a | Some[anything] & 'c] | 'b)
 
 let some_ = some : forall 'a: (Object & 'a) -> Opt['a]
 //│ let some_: forall 'a. (Object & 'a) -> Opt['a]
@@ -136,16 +136,21 @@ some_(some_(None))
 //│ res
 //│     = Some {}
 
+let ss = some_(some_(42))
+//│ let ss: Opt[Opt[42]]
+//│ ss
+//│    = 42
+
 :e
 ss : Opt[Int]
 //│ ╔══[ERROR] Type mismatch in type ascription:
-//│ ║  l.140: 	ss : Opt[Int]
+//│ ║  l.145: 	ss : Opt[Int]
 //│ ║         	^^
 //│ ╟── type `Some['a]` is not an instance of type `Int`
 //│ ║  l.17: 	type Opt[out A] = Some[A] | None | A & ~Some & ~None
 //│ ║        	                  ^^^^^^^
 //│ ╟── Note: constraint arises from type reference:
-//│ ║  l.140: 	ss : Opt[Int]
+//│ ║  l.145: 	ss : Opt[Int]
 //│ ╙──       	         ^^^
 //│ Opt[Int]
 //│ res
@@ -192,7 +197,7 @@ let ss = some(some(42))
 :e
 ss : Opt[Int]
 //│ ╔══[ERROR] Type mismatch in type ascription:
-//│ ║  l.193: 	ss : Opt[Int]
+//│ ║  l.198: 	ss : Opt[Int]
 //│ ║         	^^
 //│ ╟── application of type `Some[?A]` does not match type `Int | ~Some[anything]`
 //│ ║  l.23: 	  refined(Some) then Some(x)
@@ -220,10 +225,10 @@ let s = some(None)
 :e
 s : Opt[Int]
 //│ ╔══[ERROR] Type mismatch in type ascription:
-//│ ║  l.221: 	s : Opt[Int]
+//│ ║  l.226: 	s : Opt[Int]
 //│ ║         	^
 //│ ╟── reference of type `None` does not match type `Int | ~None`
-//│ ║  l.215: 	let s = some(None)
+//│ ║  l.220: 	let s = some(None)
 //│ ╙──       	             ^^^^
 //│ Opt[Int]
 //│ res
@@ -247,7 +252,7 @@ some(some(None))
 :e
 ss : Opt[Int]
 //│ ╔══[ERROR] Type mismatch in type ascription:
-//│ ║  l.248: 	ss : Opt[Int]
+//│ ║  l.253: 	ss : Opt[Int]
 //│ ║         	^^
 //│ ╟── application of type `Some[?A]` does not match type `Int | ~Some[anything]`
 //│ ║  l.23: 	  refined(Some) then Some(x)
@@ -275,10 +280,10 @@ fun mk(x: Object) = some(x)
 :e
 fun mk[A](x: A) = some(x)
 //│ ╔══[ERROR] Type mismatch in application:
-//│ ║  l.276: 	fun mk[A](x: A) = some(x)
+//│ ║  l.281: 	fun mk[A](x: A) = some(x)
 //│ ║         	                  ^^^^^^^
 //│ ╟── reference of type `A` is not an instance of type `Object`
-//│ ║  l.276: 	fun mk[A](x: A) = some(x)
+//│ ║  l.281: 	fun mk[A](x: A) = some(x)
 //│ ║         	                       ^
 //│ ╟── Note: constraint arises from `case` expression:
 //│ ║  l.21: 	fun some(x) = if x is
@@ -293,7 +298,7 @@ fun mk[A](x: A) = some(x)
 //│ ║  l.21: 	fun some(x) = if x is
 //│ ║        	                 ^
 //│ ╟── Note: method type parameter A is defined at:
-//│ ║  l.276: 	fun mk[A](x: A) = some(x)
+//│ ║  l.281: 	fun mk[A](x: A) = some(x)
 //│ ╙──       	       ^
 //│ fun mk: forall 'A 'a 'b. (x: 'A) -> (Some[Some[anything] & 'a | 'A & (None | None & ~'a & ~'b | Some[anything])] | error | 'A & ~#None & ~#Some | 'b)
 

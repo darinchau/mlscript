@@ -1,0 +1,30 @@
+:NewDefs
+
+module None
+class Some[out A](val x: A)
+type Option[A] = Some[A] | None
+//│ module None
+//│ class Some[A](x: A)
+//│ type Option[A] = None | Some[A]
+
+// ===================================== Let the weirdness begin =====================================
+
+let s = Some(Some(42))
+//│ let s: Some[Some[42]]
+//│ s
+//│   = Some {}
+
+:e
+s: Option[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.18: 	s: Option[Int]
+//│ ║        	^
+//│ ╟── application of type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.12: 	let s = Some(Some(42))
+//│ ╙──      	             ^^^^^^^^
+//│ Option[Int]
+//│ res
+//│     = Some {}
+
+:e
+// s: Option[Int]

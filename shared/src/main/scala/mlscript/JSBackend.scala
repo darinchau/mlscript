@@ -202,10 +202,10 @@ abstract class JSBackend(allowUnresolvedSymbols: Bool) {
         case S(x) => translateApp(App(Var("__builtin_some"), trm))
         case _ => translateApp(t)
       }
-    case t @ App(Sel(Var("Some"), Var("unapply")), trm) =>
-      translateApp(t)
+    // case t @ App(Sel(Var("Some"), Var("unapply")), trm) =>
+    //   translateApp(t)
     // End override for unboxed options
-    
+
     case t: App =>
       translateApp(t)
     case Rcd(fields) =>
@@ -273,15 +273,17 @@ abstract class JSBackend(allowUnresolvedSymbols: Bool) {
     case CaseOf(trm, Wildcard(default)) =>
       JSCommaExpr(translateTerm(trm) :: translateTerm(default) :: Nil)
       // Pattern match with two branches -> tenary operator
-    case CaseOf(trm, cs @ Case(Var("Some"), csq, Wildcard(alt))) =>
-      // Report an error for Some -> Wildcard for now
-      TODO("case else for Options not implemented D:")
     case CaseOf(trm, cs @ Case(tst, csq, Wildcard(alt))) =>
+      tst match { // Note: sometimes the codegen falls back to using case branch but most of the time it likes if clauses
+        case Var("Some") if scope.resolveValue("__builtin_some").isDefined => TODO("case else for Options not implemented D:")
+        case _ => translateCase(translateTerm(trm), tst)(scope)(translateTerm(csq), translateTerm(alt))
+      }
       translateCase(translateTerm(trm), tst)(scope)(translateTerm(csq), translateTerm(alt))
     // Pattern match with more branches -> chain of ternary expressions with cache
     case CaseOf(trm, cases) =>
       val arg = translateTerm(trm)
-      if (arg.isSimple) {
+      if (arg.isSimple) { // Unreachable (?)
+        die
         translateCaseBranch(arg, cases)
       } else {
         val name = scope.declareRuntimeSymbol()
@@ -361,6 +363,9 @@ abstract class JSBackend(allowUnresolvedSymbols: Bool) {
   private def translateCaseBranch(scrut: JSExpr, branch: CaseBranches)(implicit
       scope: Scope
   ): JSExpr = branch match {
+    // For unboxed options
+    case Case(Var("Some"), body, rest) if scope.resolveValue("__builtin_some").isDefined => 
+      translateCase(scrut, Var("Builtin_Some__"))(scope)(translateTerm(body), translateCaseBranch(scrut, rest))
     case Case(pat, body, rest) =>
       translateCase(scrut, pat)(scope)(translateTerm(body), translateCaseBranch(scrut, rest))
     case Wildcard(body) =>

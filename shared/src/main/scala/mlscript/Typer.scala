@@ -240,6 +240,7 @@ class Typer(var dbg: Boolean, var verbose: Bool, var explainErrors: Bool, val ne
     NuTypeDef(Als, TN("undefined"), Nil, N, N, S(Literal(UnitLit(true))), Nil, N, N, TypingUnit(Nil))(N, S(preludeLoc)),
     NuTypeDef(Als, TN("null"), Nil, N, N, S(Literal(UnitLit(false))), Nil, N, N, TypingUnit(Nil))(N, S(preludeLoc)),
     // For unboxed options:
+    // Note to self: this exists so desugarer wont screw things up and we get nice case branches for options
     NuTypeDef(Cls, TN("Some"), (S(VarianceInfo.co) -> TN("A")) :: Nil,
       S(Tup( (S(Var("value")), Fld(FldFlags.empty, Var("A"))) :: Nil )),
       N, N, Nil, N, N,
