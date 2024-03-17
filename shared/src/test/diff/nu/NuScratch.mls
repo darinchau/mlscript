@@ -1,41 +1,46 @@
 :NewDefs
 
 // This is used internally to process stuff
-class Builtin_Some__(depth: Int)
+declare module None
+class Builtin_Some__(depth: Int) {
+  fun x = if depth == 1 then None else Builtin_Some__(depth - 1)
+}
 module Builtin_None__
 type Builtin_Opts__[A] = Builtin_None__ | Builtin_Some__ | A & Object & ~Builtin_None__ & ~Builtin_Some__
 fun __builtin_some(x) = if x is
   Builtin_None__ then Builtin_Some__(1)
+  None then Builtin_Some__(1)
   Builtin_Some__(d) then Builtin_Some__(d + 1)
   _ then x
 fun __builtin_some_unapply(x) = if x is
-  Builtin_Some__(1) then None
-  Builtin_Some__(d) then Some(__builtin_some_unapply(Builtin_Some__(d - 1)))
-  Builtin_None__ then None
+  Builtin_Some__ then x.x
   _ then x
-//│ class Builtin_Some__(depth: Int)
+//│ declare module None
+//│ class Builtin_Some__(depth: Int) {
+//│   fun x: Builtin_Some__ | None
+//│ }
 //│ module Builtin_None__
 //│ type Builtin_Opts__[A] = Builtin_None__ | Builtin_Some__ | Object & A & ~Builtin_None__ & ~Builtin_Some__
-//│ fun __builtin_some: forall 'a. (Builtin_None__ | Builtin_Some__ | Object & 'a & ~#Builtin_None__ & ~#Builtin_Some__) -> (Builtin_Some__ | 'a)
-//│ fun __builtin_some_unapply: forall 'b. (Builtin_None__ | Builtin_Some__ | Object & 'b & ~#Builtin_None__ & ~#Builtin_Some__) -> (None | 'b)
-//│ where
-//│   'b :> Some[None | 'b]
+//│ fun __builtin_some: forall 'a. (Builtin_None__ | Builtin_Some__ | None | Object & 'a & ~#Builtin_None__ & ~#Builtin_Some__ & ~#None) -> (Builtin_Some__ | 'a)
+//│ fun __builtin_some_unapply: forall 'b. (Builtin_Some__ | Object & 'b & ~#Builtin_Some__) -> (Builtin_Some__ | None | 'b)
 
 
 // This is exposed to the user
-class Some[out A](val x: A)
 module None
-type Option[A] = Some[A] | None
-//│ class Some[A](x: A)
+class Some[out A](val x: A) {
+  fun unapply(self) = __builtin_some_unapply(self)
+}
+type Option[out A] = Some[A] | None
 //│ module None
+//│ class Some[A](x: A) {
+//│   fun unapply: forall 'a. (Builtin_Some__ | Object & 'a & ~#Builtin_Some__) -> (Builtin_Some__ | None | 'a)
+//│ }
 //│ type Option[A] = None | Some[A]
 
+
+// ============================== Apply ==========================
 :js
-:p
 let x = Some(1) 
-//│ |#let| |x| |#=| |Some|(|1|)| |
-//│ AST: TypingUnit(List(NuFunDef(Some(false),Var(x),None,List(),Left(App(Var(Some),Tup(List((None,Fld(_,IntLit(1))))))))))
-//│ Parsed: let x = Some(1,);
 //│ let x: Some[1]
 //│ // Prelude
 //│ class TypingUnit2 {}
@@ -47,11 +52,7 @@ let x = Some(1)
 //│   = 1
 
 :js
-:p
 let y = None 
-//│ |#let| |y| |#=| |None| |
-//│ AST: TypingUnit(List(NuFunDef(Some(false),Var(y),None,List(),Left(Var(None)))))
-//│ Parsed: let y = None;
 //│ let y: None
 //│ // Prelude
 //│ class TypingUnit3 {}
@@ -72,49 +73,113 @@ let z = Some(None)
 //│ globalThis.z = __builtin_some(None);
 //│ // End of generated code
 //│ z
-//│   = None { class: [class None] }
+//│   = Builtin_Some__ {}
 
-// That means its like
-// case Some => let y = Some.unapply(x); 1
-:js
-fun f: Option['a] -> Int
-fun f(x) = if x is
-  Some(y) then 1 
-  None then 2
-  _ then 3
-//│ fun f: (Object & ~#Some | Some[anything]) -> (1 | 2 | 3)
-//│ fun f: forall 'a. Option['a] -> Int
-//│ // Prelude
-//│ class TypingUnit5 {}
-//│ const typing_unit5 = new TypingUnit5;
-//│ // Query 1 is empty
-//│ // Query 2
-//│ globalThis.f = function f(x) {
-//│   let a;
-//│   return a = x, a instanceof Builtin_Some__.class ? ((ucs$args_x$Some) => ((y) => 1)(ucs$args_x$Some[0]))(__builtin_some_unapply(x)) : a instanceof None.class ? 2 : 3;
-//│ };
-//│ // End of generated code
+z.x
+//│ None
+//│ res
+//│     = undefined
 
 :js
-f(Some(1))
-//│ Int
+let a = Some(Some(1))
+//│ let a: Some[Some[1]]
 //│ // Prelude
 //│ class TypingUnit6 {}
 //│ const typing_unit6 = new TypingUnit6;
 //│ // Query 1
-//│ res = f(__builtin_some(1));
+//│ globalThis.a = __builtin_some(__builtin_some(1));
 //│ // End of generated code
-//│ res
-//│     = 3
+//│ a
+//│   = 1
 
-:js
-f(None)
-//│ Int
-//│ // Prelude
-//│ class TypingUnit7 {}
-//│ const typing_unit7 = new TypingUnit7;
-//│ // Query 1
-//│ res = f(None);
-//│ // End of generated code
+let s1 = Some(1)
+//│ let s1: Some[1]
+//│ s1
+//│    = 1
+
+:e
+s1: Option[Option[Int]]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.101: 	s1: Option[Option[Int]]
+//│ ║         	^^
+//│ ╟── integer literal of type `1` does not match type `None | Some[Int]`
+//│ ║  l.95: 	let s1 = Some(1)
+//│ ║        	              ^
+//│ ╟── Note: constraint arises from union type:
+//│ ║  l.33: 	type Option[out A] = Some[A] | None
+//│ ║        	                     ^^^^^^^^^^^^^^
+//│ ╟── from applied type reference:
+//│ ║  l.101: 	s1: Option[Option[Int]]
+//│ ╙──       	           ^^^^^^^^^^^
+//│ Option[Option[Int]]
 //│ res
-//│     = 2
+//│     = 1
+
+let ss1 = Some(Some(1))
+//│ let ss1: Some[Some[1]]
+//│ ss1
+//│     = 1
+
+:e
+ss1: Option[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.124: 	ss1: Option[Int]
+//│ ║         	^^^
+//│ ╟── application of type `Some[?A]` is not an instance of type `Int`
+//│ ║  l.118: 	let ss1 = Some(Some(1))
+//│ ╙──       	               ^^^^^^^
+//│ Option[Int]
+//│ res
+//│     = 1
+
+let sn = Some(None)
+//│ let sn: Some[None]
+//│ sn
+//│    = Builtin_Some__ {}
+
+sn: Option[None]
+//│ Option[None]
+//│ res
+//│     = Builtin_Some__ {}
+
+:e
+sn: Option[Int]
+//│ ╔══[ERROR] Type mismatch in type ascription:
+//│ ║  l.146: 	sn: Option[Int]
+//│ ║         	^^
+//│ ╟── reference of type `None` is not an instance of type `Int`
+//│ ║  l.135: 	let sn = Some(None)
+//│ ╙──       	              ^^^^
+//│ Option[Int]
+//│ res
+//│     = Builtin_Some__ {}
+
+sn: Option[Option[Int]]
+//│ Option[Option[Int]]
+//│ res
+//│     = Builtin_Some__ {}
+
+// ============================== Pattern matching ==========================
+
+let s5 = Some(5)
+//│ let s5: Some[5]
+//│ s5
+//│    = 5
+
+// ============================== Old unboxed option tests ==========================
+
+fun some(x) = Some(x)
+let some_ = some: forall 'a: 'a -> Option['a]
+//│ fun some: forall 'A. 'A -> Some['A]
+//│ let some_: forall 'a. 'a -> Option['a]
+//│ some_
+//│       = [Function: some]
+
+fun fold(opt, k, d) = if opt is
+  refined(None) then d
+  refined(Some) then k(opt.x)
+  else k(opt)
+//│ fun fold: forall 'x 'a. (None | Object & 'x & ~#None & ~#Some | Some[anything] & {x: 'x}, 'x -> 'a, 'a) -> 'a
+
+// ===================================================================================
+
